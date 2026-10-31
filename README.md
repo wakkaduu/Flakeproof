@@ -34,7 +34,7 @@ The model only reads and recommends. Amounts, splits and rounding are plain code
 | Piece | State |
 |---|---|
 | PayPal sandbox spike: authorize, capture, void, payout | **Run against the real sandbox, all pass.** See [docs/spike-results.md](docs/spike-results.md) |
-| Server: events, guests, deposits, state machine, host-approved settlement ([API](docs/api.md)) | Built. 54 automated tests pass against a **fake** PayPal. Against the real sandbox, only order creation and "not approved yet" were checked by hand; the full flow awaits `npm run e2e:sandbox` |
+| Server: events, guests, deposits, state machine, host-approved settlement ([API](docs/api.md)) | Built. 60 automated tests pass against a **fake** PayPal, and `npm run e2e:sandbox` passes against the **real sandbox** (see [results](docs/spike-results.md)) |
 | Guest link page | Not started |
 | RSVP agent | Not started |
 | Judge + host approval | Not started |
