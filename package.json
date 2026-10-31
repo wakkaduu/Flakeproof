@@ -6,8 +6,12 @@
   "license": "MIT",
   "type": "module",
   "engines": { "node": ">=22" },
+  "workspaces": ["server"],
   "scripts": {
     "spike": "node --env-file=.env scripts/spike/spike.mjs",
-    "spike:reset": "node scripts/spike/spike.mjs reset"
+    "spike:reset": "node scripts/spike/spike.mjs reset",
+    "dev": "npm run dev -w server",
+    "test": "npm test -w server",
+    "typecheck": "npm run typecheck -w server"
   }
 }

@@ -1,0 +1,96 @@
+// SQLite. Money is always integer cents. Enum-like columns are plain strings,
+// validated by the TypeScript state machine (src/domain/stateMachine.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id                  String    @id @default(cuid())
+  title               String
+  startsAt            DateTime
+  depositCents        Int
+  currency            String
+  hostTokenHash       String    @unique
+  status              String    @default("open") // open | ended | settled
+  endedAt             DateTime?
+  settlementStartedAt DateTime? // set when the host approves; check-ins/decisions lock
+  settledAt           DateTime?
+  createdAt           DateTime  @default(now())
+
+  guests Guest[]
+  payout Payout?
+}
+
+model Guest {
+  id          String   @id @default(cuid())
+  eventId     String
+  name        String
+  inviteToken String   @unique
+  attendance  String   @default("unknown") // unknown | showed | no_show
+  decision    String? // capture | forgive  (host's decision, only for no-shows)
+  createdAt   DateTime @default(now())
+
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  deposit    Deposit?
+  payoutItem PayoutItem?
+
+  @@index([eventId])
+}
+
+model Deposit {
+  id              String    @id @default(cuid())
+  guestId         String    @unique
+  amountCents     Int
+  currency        String
+  status          String    @default("pending") // pending | authorized | capture_pending | captured | voided
+  orderId         String    @unique
+  approveUrl      String
+  payerEmail      String?
+  authorizationId String?   @unique
+  authorizedAt    DateTime?
+  captureId       String?
+  feeCents        Int? // PayPal's fee on the capture
+  netCents        Int? // what the merchant actually received from the capture
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+}
+
+model Payout {
+  id                 String   @id @default(cuid())
+  eventId            String   @unique
+  senderBatchId      String   @unique
+  paypalBatchId      String?
+  batchStatus        String   @default("NOT_SENT") // NOT_SENT | PayPal batch_status
+  potCents           Int // sum of capture nets
+  feeReserveCents    Int // estimated payout fees held back
+  distributableCents Int // what is split among attendees
+  createdAt          DateTime @default(now())
+
+  event Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items PayoutItem[]
+}
+
+model PayoutItem {
+  id            String  @id @default(cuid())
+  payoutId      String
+  guestId       String  @unique
+  receiverEmail String
+  amountCents   Int
+  status        String  @default("NOT_SENT") // NOT_SENT | PayPal transaction_status
+  paypalItemId  String?
+  feeCents      Int? // actual fee PayPal charged, recorded after the fact
+  errorName     String?
+
+  payout Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  guest  Guest  @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([payoutId])
+}
