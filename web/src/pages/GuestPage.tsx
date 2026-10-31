@@ -151,7 +151,7 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
           {busy === 'starting' ? 'Opening PayPal…' : 'Approve with PayPal'}
         </button>
         <p className="mt-3 text-sm text-ink-soft">
-          PayPal's page may say “Pay Now”. Here it only places the hold.
+          On PayPal's page the final button says “Complete Purchase”. Here it only places the hold.
         </p>
       </Card>
     );

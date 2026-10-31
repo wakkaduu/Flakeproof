@@ -49,7 +49,6 @@ FAIL lines and `debug-id`s. A payout only counts as done when the payout **item*
   non-zero, the merchant receives less than the deposit, and paying out the full deposit
   would come out of the host's balance. The spike prints fee/net so we can decide the pot
   rule from real data (this touches money rules, so it needs your decision).
-- **Button wording:** the approval page's final button reads like a payment ("Pay Now")
-  although only a hold is created. Worth explaining on our own guest page.
+- **Button wording (observed on the sandbox):** after logging in, PayPal's final button says "Complete Purchase" even though only a hold is created. Our guest page says so up front.
 - Authorization honor period is 3 days; valid 29 days; reauthorization is days 4-29. Sandbox
   authorizations are not observed to expire, so expiry can't be tested by waiting.
