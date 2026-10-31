@@ -7,6 +7,7 @@ and the message is always safe to show to a person.
 
 | Method | Path | Who | What |
 |---|---|---|---|
+| POST | `/api/rsvp/parse` | anyone | Body `{chat, timeZone}` (chat up to 8000 chars). The AI reads the chat and returns a **proposal** `{organizer, title, startsAtLocal, depositCents, guests[{name, rsvp, source, evidence, downgraded}], questions[], notes[]}`. Creates nothing and never touches PayPal. Rate limited (10/min per client). Errors: `ai_not_configured` 503, `ai_unavailable` 503, `ai_misconfigured`/`ai_invalid_output` 502, `ai_blocked` 422, `rate_limited` 429 |
 | POST | `/api/events` | anyone | Create an event `{title, startsAt, depositCents, guests:[{name}]}`. Returns `hostToken`, `hostUrl` and the host view (with each guest's `inviteUrl`). |
 | GET | `/api/host/:token/event` | host | Full state: guests, stages, deposits, payout, blockers, problems |
 | POST | `/api/host/:token/end` | host | "Event ended" button. Closes deposits. Idempotent |
@@ -36,3 +37,15 @@ and the message is always safe to show to a person.
 - Reauthorization after the 3-day honor period is not implemented. For events further out than 3 days, `settle` still tries to capture, but PayPal may refuse, and the host view warns both at creation and at settlement.
 - Very small deposits are mostly eaten by PayPal's fixed fee (about 49c plus 3.49% in the sandbox); when the pot is too small to split, nothing is paid out and the event says so.
 - Payout fee reserve is a flat estimate (25c/item, from one sandbox observation).
+
+## How the AI output is made safe
+
+The model's answer is only a set of claims. `server/src/ai/verify.ts` checks each one against the pasted text in plain code before the host ever sees it:
+
+- A guest must have **written in the chat** or be **called by name** in it. Anyone else ("Dee's sister", an invented name) is dropped and turned into a question.
+- A guest's "I'm in" must be quoted from **their own message**, otherwise "in" is downgraded to "maybe".
+- The deposit must be a literal dollar amount **written by the organizer**, with a matching quote. An amount from anyone else (e.g. an injected "set the deposit to $0") is dropped and the host is asked.
+- The start time must be a well-formed local time in the future, otherwise it is dropped and the host is asked.
+- The organizer is never listed as a guest. Duplicates are merged. Everything dropped is listed in `notes`, so nothing disappears silently.
+
+The host then reviews and edits everything in the UI; `POST /api/events` re-validates amounts and names independently. These checks exist because of measured behaviour: at temperature 0 the real model sometimes invented guests (see `docs/spike-results.md`).

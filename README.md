@@ -36,7 +36,7 @@ The model only reads and recommends. Amounts, splits and rounding are plain code
 | PayPal sandbox spike: authorize, capture, void, payout | **Run against the real sandbox, all pass.** See [docs/spike-results.md](docs/spike-results.md) |
 | Server: events, guests, deposits, state machine, host-approved settlement ([API](docs/api.md)) | Built. 60 automated tests pass against a **fake** PayPal, and `npm run e2e:sandbox` passes against the **real sandbox** (see [results](docs/spike-results.md)) |
 | Guest link page (mobile-first React page: event, deposit, "Approve with PayPal", status) | Built. 17 component tests pass. **Not yet clicked through in a real browser against the sandbox**, that is the next manual check |
-| RSVP agent | Not started |
+| RSVP agent (paste chat -> verified proposal -> host review -> invite links) | Built. 96 server + 33 web tests with a **fake** model; the real Gemini adapter was run live (`npm run ai:smoke`, and through the HTTP API) and its output passes the verification layer. Not yet clicked through in a browser by a human |
 | Judge + host approval | Not started |
 | Tests with fake PayPal | Done (server). Fake AI: not started |
 
@@ -55,12 +55,14 @@ Requires Node 22+.
 ```bash
 cp .env.example .env     # fill in PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET (sandbox)
 npm run setup            # install, generate Prisma client, create the SQLite database
-npm test                 # 78 tests (server + web), no keys needed
+npm test                 # 129 tests (server + web), no keys needed
 npm run dev              # API on :3001 and web app on http://localhost:5173
 npm run dev:event        # in another terminal: creates a sample event, prints guest links
+npm run ai:smoke -w server   # runs the real Gemini model on a sample chat (needs GEMINI_API_KEY)
 ```
 
-Open a guest link, press **Approve with PayPal**, and log in with a sandbox *personal* (buyer)
+Open http://localhost:5173/new to host: paste a group chat, review what the AI found, and copy each friend's link.
+Or open a guest link, press **Approve with PayPal**, and log in with a sandbox *personal* (buyer)
 account in a private window. PayPal sends you back to the same page, which confirms the hold.
 
 Single process (what a hosted demo would use): `npm run build`, then

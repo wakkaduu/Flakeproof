@@ -62,6 +62,15 @@ export function amountsIn(text: string): number[] {
   return [...new Set(found)];
 }
 
+/** True if `evidence` (optionally prefixed "Name: ") is inside a message written by `author`. */
+function ownEvidence(messages: ChatMessage[], author: string, evidence: string): boolean {
+  let e = norm(evidence);
+  const prefix = `${norm(author)}:`;
+  if (e.startsWith(prefix)) e = e.slice(prefix.length).trim();
+  if (e.length < 1) return false;
+  return messages.some((m) => m.author !== null && norm(m.author) === norm(author) && norm(m.text).includes(e));
+}
+
 const wordIn = (haystack: string, needle: string) =>
   new RegExp(`(?:^|[^\\p{L}\\p{N}])${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^\\p{L}\\p{N}])`, 'iu').test(haystack);
 
@@ -104,7 +113,9 @@ export function verifyRsvp(draft: RsvpDraft, input: RsvpInput, opts: { maxGuests
     if (organizer && norm(name) === norm(organizer)) { notes.push(`Left out ${name}: they are the organizer (you).`); continue; }
     if (seen.has(norm(name))) { notes.push(`Ignored a duplicate entry for ${name}.`); continue; }
     seen.add(norm(name));
-    const found = evidenceInChat(g.evidence);
+    // For someone who wrote in the chat, the quoted reply must come from THEIR OWN message, so the
+    // model cannot credit one person with another person's "I'm in".
+    const found = canonical ? ownEvidence(messages, canonical, g.evidence) : evidenceInChat(g.evidence);
     let rsvp = g.rsvp;
     let downgraded = false;
     if (!found && rsvp === 'in') { rsvp = 'maybe'; downgraded = true; notes.push(`${name}: could not find the quoted reply in the chat, so “in” was changed to “maybe”.`); }

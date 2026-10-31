@@ -91,6 +91,17 @@ describe('verifyRsvp: the model guesses a person (seen live)', () => {
     expect(p.notes.join(' ')).toContain('they are the organizer');
   });
 
+  it("downgrades an \"in\" backed by someone else's message (misattribution)", () => {
+    const p = run({ guests: [{ name: 'Ben', rsvp: 'in', evidence: "Ana: I'm in!" }, { name: 'Cy', rsvp: 'in', evidence: 'Dee: in' }] });
+    expect(p.guests.map((g) => `${g.name}:${g.rsvp}`)).toEqual(['Ben:maybe', 'Cy:maybe']);
+    expect(p.guests.every((g) => g.downgraded)).toBe(true);
+  });
+
+  it('accepts a short quote only from the guest\'s own message', () => {
+    const p = run({ guests: [{ name: 'Dee', rsvp: 'in', evidence: 'in' }, { name: 'Eli', rsvp: 'in', evidence: 'sure count me in' }] });
+    expect(p.guests.map((g) => g.rsvp)).toEqual(['in', 'in']);
+  });
+
   it('downgrades an "in" whose quoted reply is not in the chat', () => {
     const p = run({ guests: [{ name: 'Ana', rsvp: 'in', evidence: 'Ana: absolutely, count me in 100%' }] });
     expect(p.guests[0]).toMatchObject({ rsvp: 'maybe', downgraded: true });

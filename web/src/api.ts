@@ -20,20 +20,24 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: 'GET' | 'POST', path: string): Promise<T> {
+async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { method, headers: { Accept: 'application/json' } });
+    res = await fetch(path, {
+      method,
+      headers: body === undefined ? { Accept: 'application/json' } : { Accept: 'application/json', 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   } catch {
     throw new ApiError(0, 'network', 'Could not reach the server. Check your connection and try again.');
   }
-  let body: unknown = null;
-  try { body = await res.json(); } catch { /* empty or non-JSON body */ }
+  let payload: unknown = null;
+  try { payload = await res.json(); } catch { /* empty or non-JSON body */ }
   if (!res.ok) {
-    const e = (body as { error?: { code?: string; message?: string } } | null)?.error;
+    const e = (payload as { error?: { code?: string; message?: string } } | null)?.error;
     throw new ApiError(res.status, e?.code ?? 'error', e?.message ?? 'Something went wrong. Please try again.');
   }
-  return body as T;
+  return payload as T;
 }
 
 export interface GuestApi {
@@ -47,4 +51,41 @@ export const guestApi: GuestApi = {
   getGuest: (t) => request('GET', `/api/g/${enc(t)}`),
   startDeposit: (t) => request('POST', `/api/g/${enc(t)}/deposit`),
   authorize: (t) => request('POST', `/api/g/${enc(t)}/authorize`),
+};
+
+// ---- host side: read a pasted chat, then create the event ----------------------------------
+
+/** What the server proposes after reading a chat. Every guest/amount/time was verified against the chat. */
+export interface RsvpProposal {
+  organizer: string | null;
+  title: string | null;
+  /** Local wall-clock "YYYY-MM-DDTHH:mm" in the host's time zone, or null when unclear. */
+  startsAtLocal: string | null;
+  depositCents: number | null;
+  guests: { name: string; rsvp: 'in' | 'maybe' | 'out'; source: 'author' | 'mentioned'; evidence: string; downgraded: boolean }[];
+  questions: string[];
+  notes: string[];
+}
+
+export interface CreateEventBody {
+  title: string;
+  startsAt: string; // ISO with offset
+  depositCents: number;
+  guests: { name: string }[];
+}
+
+export interface CreatedEvent {
+  hostToken: string;
+  hostUrl: string;
+  event: { id: string; title: string; warnings: string[]; guests: { id: string; name: string; inviteUrl: string }[] };
+}
+
+export interface HostApi {
+  parseRsvp(chat: string, timeZone: string): Promise<RsvpProposal>;
+  createEvent(body: CreateEventBody): Promise<CreatedEvent>;
+}
+
+export const hostApi: HostApi = {
+  parseRsvp: (chat, timeZone) => request('POST', '/api/rsvp/parse', { chat, timeZone }),
+  createEvent: (body) => request('POST', '/api/events', body),
 };
