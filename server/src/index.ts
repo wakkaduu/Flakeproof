@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { createApp } from './app.js';
 import { loadEnv } from './config.js';
-import { GeminiRsvpModel } from './ai/gemini.js';
+import { GeminiJudgeModel, GeminiRsvpModel } from './ai/gemini.js';
 import { createDb } from './db.js';
 import { RealPayPalClient } from './paypal/client.js';
 import { KeyedMutex } from './util.js';
@@ -20,6 +20,7 @@ const app = createApp({
   db: createDb(env.databaseUrl),
   paypal: new RealPayPalClient({ clientId: env.clientId, clientSecret: env.clientSecret }),
   rsvp: env.gemini ? new GeminiRsvpModel(env.gemini) : null,
+  judge: env.gemini ? new GeminiJudgeModel(env.gemini) : null,
   config: env.config,
   mutex: new KeyedMutex(),
   now: () => new Date(),

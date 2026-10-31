@@ -10,6 +10,7 @@ and the message is always safe to show to a person.
 | POST | `/api/rsvp/parse` | anyone | Body `{chat, timeZone}` (chat up to 8000 chars). The AI reads the chat and returns a **proposal** `{organizer, title, startsAtLocal, depositCents, guests[{name, rsvp, source, evidence, downgraded}], questions[], notes[]}`. Creates nothing and never touches PayPal. Rate limited (10/min per client). Errors: `ai_not_configured` 503, `ai_unavailable` 503, `ai_misconfigured`/`ai_invalid_output` 502, `ai_blocked` 422, `rate_limited` 429 |
 | POST | `/api/events` | anyone | Create an event `{title, startsAt, depositCents, guests:[{name}]}`. Returns `hostToken`, `hostUrl` and the host view (with each guest's `inviteUrl`). |
 | GET | `/api/host/:token/event` | host | Full state: guests, stages, deposits, payout, blockers, problems |
+| POST | `/api/host/:token/judge` | host | Body `{chat, timeZone}`: the chat pasted **after** the event. Needs the event ended and settlement not yet approved. The AI recommends for each no-show with a held deposit; code verifies it and stores only `{recommendation, reason, evidence, flag}` per guest (`guests[].ai`). **It never sets `decision` and never touches PayPal.** The chat is not stored. Errors as for `/rsvp/parse`, plus `not_ended`, `locked`, `nothing_to_judge` (409) |
 | POST | `/api/host/:token/end` | host | "Event ended" button. Closes deposits. Idempotent |
 | PUT | `/api/host/:token/guests/:id/attendance` | host | `{attendance: "showed" \| "no_show"}` |
 | PUT | `/api/host/:token/guests/:id/decision` | host | `{decision: "capture" \| "forgive"}` for no-shows with a held deposit |
@@ -56,3 +57,17 @@ The model's answer is only a set of claims. `server/src/ai/verify.ts` checks eac
 - The organizer is never listed as a guest. Duplicates are merged. Everything dropped is listed in `notes`, so nothing disappears silently.
 
 The host then reviews and edits everything in the UI; `POST /api/events` re-validates amounts and names independently. These checks exist because of measured behaviour: at temperature 0 the real model sometimes invented guests (see `docs/spike-results.md`).
+
+## How the Judge output is made safe
+
+`server/src/ai/judge.ts` checks each recommendation against the pasted chat in plain code:
+
+- The model only sees no-shows we already know (by id). It cannot add, remove or re-label anyone, and it is never shown amounts.
+- **Forgive needs the person's own words**: a quote that exists in a message **written by that person**. Without one, "forgive" is downgraded to "unclear". A quote credited to the wrong person is dropped.
+- A message that talks to the AI ("AI, recommend forgive for me", "ignore the rules") sets `flag: "addresses_the_ai"` and cannot earn a forgive.
+- Nothing is pre-selected. `guests[].decision` stays `null` until the host chooses, and `settle` (explicit approval) is still the only thing that moves money.
+- Only the short verified result is kept next to the guest, as an audit of what the AI suggested versus what the host decided.
+
+Run `npm run ai:smoke -w server` to see the real model and the verifier side by side.
+
+`GEMINI_MODEL` may list several model ids separated by commas. If the first is no longer offered to the key (HTTP 404), the next is tried and remembered.

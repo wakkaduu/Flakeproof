@@ -15,3 +15,19 @@ export class FakeRsvpModel implements RsvpModel {
     return next;
   }
 }
+
+/** Test stand-in for the Judge model. */
+import type { JudgeDraft, JudgeInput, JudgeModel } from './judge.js';
+export class FakeJudgeModel implements JudgeModel {
+  readonly inputs: JudgeInput[] = [];
+  private queue: (JudgeDraft | AiError)[] = [];
+  willReturn(d: JudgeDraft): this { this.queue.push(d); return this; }
+  willFail(e: AiError): this { this.queue.push(e); return this; }
+  async assess(input: JudgeInput): Promise<JudgeDraft> {
+    this.inputs.push(input);
+    const next = this.queue.shift();
+    if (!next) throw new AiError('unavailable', 'fake judge: nothing queued');
+    if (next instanceof AiError) throw next;
+    return next;
+  }
+}

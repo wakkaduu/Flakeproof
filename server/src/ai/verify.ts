@@ -31,7 +31,7 @@ export interface RsvpProposal {
   notes: string[];
 }
 
-const norm = (s: string) =>
+export const norm = (s: string) =>
   s.normalize('NFKC').toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
 
 const LINE = /^(?:\[[^\]]{3,40}\]\s*|\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?\s*[-–]\s*)?([^:\n]{1,40}?):\s+(.*)$/i;
@@ -63,12 +63,23 @@ export function amountsIn(text: string): number[] {
 }
 
 /** True if `evidence` (optionally prefixed "Name: ") is inside a message written by `author`. */
-function ownEvidence(messages: ChatMessage[], author: string, evidence: string): boolean {
+export function ownEvidence(messages: ChatMessage[], author: string, evidence: string): boolean {
   let e = norm(evidence);
   const prefix = `${norm(author)}:`;
   if (e.startsWith(prefix)) e = e.slice(prefix.length).trim();
   if (e.length < 1) return false;
   return messages.some((m) => m.author !== null && norm(m.author) === norm(author) && norm(m.text).includes(e));
+}
+
+/** The chat author a name refers to: exact match, or a first name that matches exactly one author. */
+export function findAuthor(messages: ChatMessage[], name: string): string | null {
+  const authors = new Map<string, string>();
+  for (const m of messages) if (m.author) authors.set(norm(m.author), m.author);
+  const key = norm(name);
+  const exact = authors.get(key);
+  if (exact) return exact;
+  const first = [...authors.entries()].filter(([a]) => a.split(' ')[0] === key);
+  return first.length === 1 ? first[0]![1] : null;
 }
 
 const wordIn = (haystack: string, needle: string) =>

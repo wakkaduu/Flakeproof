@@ -34,6 +34,12 @@ model Guest {
   inviteToken String   @unique
   attendance  String   @default("unknown") // unknown | showed | no_show
   decision    String? // capture | forgive  (host's decision, only for no-shows)
+  // The AI Judge's verified recommendation. Audit only: it NEVER sets `decision`. Just the short
+  // quote and sentence; the pasted chat itself is not stored.
+  aiRecommendation String? // capture | forgive | unclear
+  aiReason         String?
+  aiEvidence       String? // exact quote from the no-show's own message, verified against the chat
+  aiFlag           String? // addresses_the_ai
   createdAt   DateTime @default(now())
 
   event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)

@@ -33,6 +33,8 @@ because they are cheap now and expensive to change later.
 - "Unclear" is a valid and encouraged answer. Silence in the chat means the host decides; the model
   never guesses an excuse into existence.
 - The reason shown to the host is the quote plus a short model sentence, labelled as AI.
+- Built as designed (`server/src/ai/judge.ts`, `POST /api/host/:token/judge`). Only the verified recommendation, the one-sentence reason and the quote are stored next to the guest, as an audit; the chat is not.
+- A message that addresses the AI is flagged and cannot earn a forgive. Run against the real model, this held in 3 of 3 runs (see `npm run ai:smoke`).
 
 ## The new attack surface, and the answer
 

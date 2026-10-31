@@ -146,6 +146,8 @@ export function hostView(ctx: Ctx, ev: EventFull) {
       inviteUrl: `${ctx.config.appBaseUrl}/g/${g.inviteToken}`,
       attendance: attendanceOf(g),
       decision: decisionOf(g),
+      /** The AI's verified recommendation, or null. Never pre-selects the decision. */
+      ai: g.aiRecommendation ? { recommendation: g.aiRecommendation as 'capture' | 'forgive' | 'unclear', reason: g.aiReason ?? '', evidence: g.aiEvidence, flag: g.aiFlag as 'addresses_the_ai' | null } : null,
       stage: deriveGuestStage({ attendance: attendanceOf(g), depositStatus: dep ? depositStatusOf(dep) : null, payoutItemStatus: item?.status ?? null }),
       deposit: dep && {
         status: depositStatusOf(dep), amountCents: dep.amountCents, feeCents: dep.feeCents, netCents: dep.netCents,

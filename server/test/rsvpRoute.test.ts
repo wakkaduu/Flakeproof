@@ -70,7 +70,7 @@ describe('POST /api/rsvp/parse', () => {
   it('says so plainly when no AI is configured', async () => {
     const { createApp } = await import('../src/app.js');
     const { KeyedMutex } = await import('../src/util.js');
-    const app = createApp({ db: h.db, paypal: h.paypal, rsvp: null, config: h.config, mutex: new KeyedMutex(), now: () => new Date() });
+    const app = createApp({ db: h.db, paypal: h.paypal, rsvp: null, judge: null, config: h.config, mutex: new KeyedMutex(), now: () => new Date() });
     const server = await new Promise<import('node:http').Server>((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
     try {
       const res = await fetch(`http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}/api/rsvp/parse`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat: CHAT, timeZone: 'UTC' }) });

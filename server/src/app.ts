@@ -8,6 +8,7 @@ import { finalizeDeposit, getGuestView, startDeposit } from './services/deposits
 import {
   CreateEventInput, createEvent, endEvent, hostView, loadHostEvent, markAttendance, setDecision,
 } from './services/events.js';
+import { runJudge } from './services/judge.js';
 import { parseRsvp } from './services/rsvp.js';
 import { settle } from './services/settlement.js';
 import { RateLimiter } from './util.js';
@@ -34,14 +35,14 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
     next();
   });
 
-  const rsvpLimiter = new RateLimiter(ctx.config.rsvpPerMinute, 60_000);
+  const aiLimiter = new RateLimiter(ctx.config.rsvpPerMinute, 60_000);
   const eventsLimiter = new RateLimiter(ctx.config.eventsPerMinute, 60_000);
   const api = Router();
   api.get('/health', (_req, res) => { res.json({ ok: true }); });
 
   // ---- AI: read a pasted chat and PROPOSE guests/amount/time. Creates nothing; the host reviews.
   api.post('/rsvp/parse', async (req, res) => {
-    if (!rsvpLimiter.allow(req.ip ?? 'unknown')) {
+    if (!aiLimiter.allow(req.ip ?? 'unknown')) {
       res.setHeader('Retry-After', '30');
       throw new AppError(429, 'rate_limited', 'Too many requests. Wait a moment and try again.');
     }
@@ -67,6 +68,14 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
     api.get('/host/:token/event', async (req, res) => {
     const t = Token.parse(req.params.token);
     res.json(hostView(ctx, await loadHostEvent(ctx, t)));
+  });
+  // AI recommendation for each no-show. Only recommends: it cannot set a decision or move money.
+  api.post('/host/:token/judge', async (req, res) => {
+    if (!aiLimiter.allow(req.ip ?? 'unknown')) {
+      res.setHeader('Retry-After', '30');
+      throw new AppError(429, 'rate_limited', 'Too many requests. Wait a moment and try again.');
+    }
+    res.json(hostView(ctx, await runJudge(ctx, Token.parse(req.params.token), req.body)));
   });
   api.post('/host/:token/end', async (req, res) => {
     res.json(hostView(ctx, await endEvent(ctx, Token.parse(req.params.token))));
