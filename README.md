@@ -2,7 +2,7 @@
 
 > A deposit that costs you nothing if you show up.
 
-**Status: day 1. Nothing here is a working product yet.** This README will be kept honest;
+**Status: day 1 of building. The money flow works in the sandbox; there is no UI or AI yet.** This README will be kept honest;
 every claim below is labelled by what has actually been run.
 
 ## The idea
@@ -34,11 +34,11 @@ The model only reads and recommends. Amounts, splits and rounding are plain code
 | Piece | State |
 |---|---|
 | PayPal sandbox spike: authorize, capture, void, payout | **Run against the real sandbox, all pass.** See [docs/spike-results.md](docs/spike-results.md) |
-| Server, state machine | Not started |
+| Server: events, guests, deposits, state machine, host-approved settlement ([API](docs/api.md)) | Built. 54 automated tests pass against a **fake** PayPal. Against the real sandbox, only order creation and "not approved yet" were checked by hand; the full flow awaits `npm run e2e:sandbox` |
 | Guest link page | Not started |
 | RSVP agent | Not started |
 | Judge + host approval | Not started |
-| Tests with fake PayPal / fake AI | Not started |
+| Tests with fake PayPal | Done (server). Fake AI: not started |
 
 ## Sandbox only
 
@@ -48,14 +48,23 @@ See [docs/sandbox-setup.md](docs/sandbox-setup.md) for accounts and credentials.
 
 PayPal charges fees even in sandbox, so the pot paid out is smaller than the sum of deposits. See the spike results.
 
-## Running the spike
+## Run it
+
+Requires Node 22+.
 
 ```bash
-cp .env.example .env     # then fill in sandbox credentials
-npm run spike
+cp .env.example .env     # fill in PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET (sandbox)
+npm run setup            # install, generate Prisma client, create the SQLite database
+npm test                 # 54 tests, no keys needed
+npm run dev              # API on http://localhost:3001
 ```
 
-Requires Node 22+. No dependencies to install for the spike.
+Two scripts talk to the **real sandbox** and ask you to approve payments as a sandbox buyer:
+
+```bash
+npm run spike            # raw PayPal calls: authorize, capture, void, payout
+npm run e2e:sandbox      # the whole server flow: 3 friends, 1 flakes, pot paid to the 2 who came
+```
 
 ## Unverified
 

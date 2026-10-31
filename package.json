@@ -5,13 +5,19 @@
   "description": "A deposit that costs you nothing if you show up. PayPal sandbox + AI hackathon entry.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "workspaces": ["server"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "server"
+  ],
   "scripts": {
     "spike": "node --env-file=.env scripts/spike/spike.mjs",
     "spike:reset": "node scripts/spike/spike.mjs reset",
     "dev": "npm run dev -w server",
     "test": "npm test -w server",
-    "typecheck": "npm run typecheck -w server"
+    "typecheck": "npm run typecheck -w server",
+    "e2e:sandbox": "npm run e2e:sandbox -w server",
+    "setup": "npm install && npm run db:generate -w server && npm run db:deploy -w server"
   }
 }
