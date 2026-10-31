@@ -33,7 +33,7 @@ The model only reads and recommends. Amounts, splits and rounding are plain code
 
 | Piece | State |
 |---|---|
-| PayPal sandbox spike: authorize, capture, void, payout | Script written, **not yet run against the real sandbox** |
+| PayPal sandbox spike: authorize, capture, void, payout | **Run against the real sandbox, all pass.** See [docs/spike-results.md](docs/spike-results.md) |
 | Server, state machine | Not started |
 | Guest link page | Not started |
 | RSVP agent | Not started |
@@ -44,6 +44,9 @@ The model only reads and recommends. Amounts, splits and rounding are plain code
 
 This project uses the PayPal **sandbox** exclusively. No live credentials, no real money.
 See [docs/sandbox-setup.md](docs/sandbox-setup.md) for accounts and credentials.
+**Use a United States business account (USD).** A non-US sandbox merchant converts currency and Payouts then fails with `INSUFFICIENT_FUNDS`.
+
+PayPal charges fees even in sandbox, so the pot paid out is smaller than the sum of deposits. See the spike results.
 
 ## Running the spike
 

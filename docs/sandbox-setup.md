@@ -13,8 +13,9 @@ Items marked **(unverified)** came from docs I could not fully confirm; the spik
 | 4 | Sandbox **Personal** account "buyer" | Approves the deposits (plays the friend) |
 | 5 | A second sandbox **Personal** account "recipient" | Receives the payout; its email is `SPIKE_PAYOUT_RECEIVER_EMAIL` |
 
-Create extra accounts under Testing Tools -> Sandbox Accounts. Use the same country for all
-(US + USD is the safest choice for Payouts). The buyer must not be the merchant: PayPal won't
+Create extra accounts under Testing Tools -> Sandbox Accounts. **Use United States for all of them (USD).** This is required, not optional: a Philippines
+business account converted the capture to PHP and the USD payout then failed with
+`INSUFFICIENT_FUNDS`. The buyer must not be the merchant: PayPal won't
 let an account pay itself.
 
 For the later 3-minute demo (four friends, three show up) you will want 4 buyer-capable
@@ -23,14 +24,13 @@ personal accounts, three of which also receive the payout. Not needed for the sp
 ## Steps
 
 1. Create the Merchant app (item 3) and copy its Client ID and Secret.
-2. **(unverified)** Payouts may need to be enabled on the app: open the app and look for
+2. **(unverified; the spike's payout worked without us finding this)** Payouts may need to be enabled on the app: open the app and look for
    *Features* (older dashboards list "Payouts" as a checkbox). PayPal's Payouts setup page
    describes enabling Payouts only for live accounts and says nothing specific for sandbox,
    so if the payout step fails with an authorization/permission error, this is the first
    place to look. Tell me the exact error.
-3. **(unverified)** The sandbox business account needs balance for payouts. New sandbox
-   business accounts normally come with a starting balance; if the payout fails with
-   insufficient funds, add funds from the sandbox account's settings.
+3. The sandbox business account needs a USD balance for payouts. A new US business account
+   had enough; a non-US one did not (see above).
 4. `cp .env.example .env` and fill in `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`,
    `SPIKE_PAYOUT_RECEIVER_EMAIL`.
 5. `npm run spike`. When it prints two links, open each in a **private window** and log in as
