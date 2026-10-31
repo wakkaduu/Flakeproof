@@ -9,15 +9,19 @@
     "node": ">=22"
   },
   "workspaces": [
-    "server"
+    "server",
+    "web"
   ],
   "scripts": {
     "spike": "node --env-file=.env scripts/spike/spike.mjs",
     "spike:reset": "node scripts/spike/spike.mjs reset",
-    "dev": "npm run dev -w server",
-    "test": "npm test -w server",
-    "typecheck": "npm run typecheck -w server",
+    "dev": "node scripts/dev.mjs",
+    "test": "npm test -w server && npm test -w web",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
     "e2e:sandbox": "npm run e2e:sandbox -w server",
-    "setup": "npm install && npm run db:generate -w server && npm run db:deploy -w server"
+    "setup": "npm install && npm run db:generate -w server && npm run db:deploy -w server",
+    "dev:event": "node scripts/dev-event.mjs",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "npm run start -w server"
   }
 }

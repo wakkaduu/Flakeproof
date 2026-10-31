@@ -35,7 +35,7 @@ The model only reads and recommends. Amounts, splits and rounding are plain code
 |---|---|
 | PayPal sandbox spike: authorize, capture, void, payout | **Run against the real sandbox, all pass.** See [docs/spike-results.md](docs/spike-results.md) |
 | Server: events, guests, deposits, state machine, host-approved settlement ([API](docs/api.md)) | Built. 60 automated tests pass against a **fake** PayPal, and `npm run e2e:sandbox` passes against the **real sandbox** (see [results](docs/spike-results.md)) |
-| Guest link page | Not started |
+| Guest link page (mobile-first React page: event, deposit, "Approve with PayPal", status) | Built. 17 component tests pass. **Not yet clicked through in a real browser against the sandbox**, that is the next manual check |
 | RSVP agent | Not started |
 | Judge + host approval | Not started |
 | Tests with fake PayPal | Done (server). Fake AI: not started |
@@ -55,9 +55,18 @@ Requires Node 22+.
 ```bash
 cp .env.example .env     # fill in PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET (sandbox)
 npm run setup            # install, generate Prisma client, create the SQLite database
-npm test                 # 60 tests, no keys needed
-npm run dev              # API on http://localhost:3001
+npm test                 # 78 tests (server + web), no keys needed
+npm run dev              # API on :3001 and web app on http://localhost:5173
+npm run dev:event        # in another terminal: creates a sample event, prints guest links
 ```
+
+Open a guest link, press **Approve with PayPal**, and log in with a sandbox *personal* (buyer)
+account in a private window. PayPal sends you back to the same page, which confirms the hold.
+
+Single process (what a hosted demo would use): `npm run build`, then
+`APP_BASE_URL=http://localhost:3001 npm start`, and open http://localhost:3001.
+`APP_BASE_URL` must be the address people actually open, because guest links and PayPal's
+return URLs are built from it.
 
 Two scripts talk to the **real sandbox** and ask you to approve payments as a sandbox buyer:
 

@@ -59,6 +59,8 @@ describe('the demo story: three show, one flakes', () => {
     // What each guest sees.
     const aView = await h.api('GET', `/api/g/${ana.invite}`);
     expect(aView.body.outcome).toEqual({ kind: 'received', amountCents: 602 });
+    expect(aView.body.share).toEqual({ amountCents: 602, status: 'SUCCESS' });
+    expect((await h.api('GET', `/api/g/${dee.invite}`)).body.share).toBeNull();
     const dView = await h.api('GET', `/api/g/${dee.invite}`);
     expect(dView.body.outcome).toEqual({ kind: 'charged', amountCents: 2000 });
   });
@@ -323,6 +325,31 @@ describe('host chooses the start time and amount freely', () => {
     expect(r.status).toBe(200);
     expect(r.body.payout).toMatchObject({ status: 'SKIPPED', skippedReason: 'pot_too_small' });
     expect(r.body.status).toBe('settled');
+  });
+});
+
+describe('serving the web app', () => {
+  it('serves index.html for client routes but never swallows /api', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'showup-web-'));
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>app</title>');
+    const { createApp } = await import('../src/app.js');
+    const { KeyedMutex } = await import('../src/util.js');
+    const app = createApp({ db: h.db, paypal: h.paypal, config: h.config, mutex: new KeyedMutex(), now: () => new Date() }, { webDir: dir });
+    const server = await new Promise<import('node:http').Server>((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+    const base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
+    try {
+      const page = await fetch(`${base}/g/some-invite-token-123`);
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain('<title>app</title>');
+      const api404 = await fetch(`${base}/api/nope`);
+      expect(api404.status).toBe(404);
+      expect(((await api404.json()) as any).error.code).toBe('not_found');
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 });
 

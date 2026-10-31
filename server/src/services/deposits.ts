@@ -30,6 +30,8 @@ export function guestView(g: GuestWithEvent) {
     stage: deriveGuestStage({ attendance: attendanceOf(g), depositStatus: depStatus, payoutItemStatus: g.payoutItem?.status ?? null }),
     depositStatus: depStatus,
     outcome,
+    // The guest's own share of the pot, if they are a recipient. Their own data only.
+    share: g.payoutItem ? { amountCents: g.payoutItem.amountCents, status: g.payoutItem.status } : null,
     canApprove: g.event.status === 'open' && (depStatus === null || depStatus === 'pending'),
   };
 }

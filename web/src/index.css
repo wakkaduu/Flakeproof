@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Design tokens. Components use these semantic names, never raw hues. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-ink: #0f172a;
+  --color-ink-soft: #475569;
+  --color-line: #e2e8f0;
+  --color-paper: #f8fafc;
+
+  --color-showup-50: #ecfdf5;
+  --color-showup-100: #d1fae5;
+  --color-showup-600: #059669;
+  --color-showup-700: #047857;
+  --color-showup-800: #065f46;
+
+  --color-hold-50: #fffbeb;
+  --color-hold-100: #fef3c7;
+  --color-hold-800: #92400e;
+
+  --color-charged-50: #fff1f2;
+  --color-charged-100: #ffe4e6;
+  --color-charged-800: #9f1239;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 8px 24px -12px rgb(15 23 42 / 0.12);
+}
+
+html, body, #root { min-height: 100%; }
+body { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); -webkit-text-size-adjust: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { createApp } from './app.js';
 import { loadEnv } from './config.js';
 import { createDb } from './db.js';
@@ -13,13 +14,14 @@ try {
   process.exit(1);
 }
 
+const webDir = resolve(import.meta.dirname, '..', '..', 'web', 'dist');
 const app = createApp({
   db: createDb(env.databaseUrl),
   paypal: new RealPayPalClient({ clientId: env.clientId, clientSecret: env.clientSecret }),
   config: env.config,
   mutex: new KeyedMutex(),
   now: () => new Date(),
-});
+}, { webDir });
 
 app.listen(env.port, () => {
   console.log(`ShowUp server on http://localhost:${env.port}  (PayPal SANDBOX)`);
