@@ -72,6 +72,15 @@ try {
   await api('PUT', `${H}/guests/${ana.id}/attendance`, { attendance: 'showed' });
   await api('PUT', `${H}/guests/${ben.id}/attendance`, { attendance: 'showed' });
   await api('PUT', `${H}/guests/${cy.id}/attendance`, { attendance: 'no_show' });
+  // The AI Judge (real Gemini, if a key is configured): it may suggest, but must never pre-select a decision.
+  const j = await api('POST', `${H}/judge`, { chat: 'Sam: Cy where are you?\nCy: lol overslept, my bad', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  if (j.status === 200) {
+    const cyView = j.body.guests.find((g) => g.name === 'Cy');
+    check('AI judge gave a suggestion for the no-show', !!cyView.ai, `suggests ${cyView.ai?.recommendation}`);
+    check('AI did not pre-select a decision (host must choose)', cyView.decision === null && j.body.canSettle === false);
+  } else {
+    console.log(`  (AI judge skipped: ${j.body?.error?.code ?? j.status})`);
+  }
   const ready = await api('PUT', `${H}/guests/${cy.id}/decision`, { decision: 'capture' });
   check('host can approve only after attendance and decisions', ready.body.canSettle === true);
 

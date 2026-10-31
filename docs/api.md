@@ -70,4 +70,6 @@ The host then reviews and edits everything in the UI; `POST /api/events` re-vali
 
 Run `npm run ai:smoke -w server` to see the real model and the verifier side by side.
 
+The host view also carries `graceMinutes` (the host's timely-excuse rule, `GRACE_HOURS`) and each `guests[].ai.minutesBeforeStart` (when the quoted message was written relative to the start, computed from the chat's timestamps in code; null if unknown). These are facts shown next to the AI's suggestion; they never set a decision.
+
 `GEMINI_MODEL` may list several model ids separated by commas. If the first is no longer offered to the key (HTTP 404), the next is tried and remembered.

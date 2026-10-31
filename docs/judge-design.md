@@ -49,8 +49,16 @@ A no-show writes part of the text the Judge reads, so they can try to talk to it
 | Naming someone else / inventing a no-show | Output is limited to known no-show ids |
 | Quote that isn't in the chat | Discarded by the verifier |
 
+## Timing: a fact computed in code, not an AI opinion
+
+Chat exports carry timestamps (`[11/7/26, 3:10 PM]`, `11/7/26, 3:10 PM -`, ISO). The server reads them and, for the
+quoted message, computes how many minutes before the event start it was written (negative = after the start). The host
+page shows it as "Wrote this 3 h 10 min before the start: within your 2 h rule" (`GRACE_HOURS`, default 2, sets the
+rule). It never changes the recommendation or the decision. The date order (month-first or day-first) is read from the
+chat itself (a 31 or a 13 settles it) or, failing that, from the event date; if nothing settles it the timing is simply
+omitted rather than guessed.
+
 ## Explicitly out of scope
 
-- Grace-window arithmetic from message timestamps (parsing chat export timestamps reliably is its own
-  project). The model may mention timing in the reason; the host judges it.
+- A grace window that *decides*. Timing is shown as a fact only (see below); the host judges it.
 - Appeals, partial captures, refunds. Capture is all-or-nothing per deposit.
