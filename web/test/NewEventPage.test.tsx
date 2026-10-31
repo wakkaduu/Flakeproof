@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
@@ -217,6 +217,34 @@ describe('NewEventPage: the links', () => {
     expect(copy).toHaveBeenLastCalledWith(`Ana: http://localhost:5173/g/${'a'.repeat(32)}\nTom: http://localhost:5173/g/${'t'.repeat(32)}`);
     expect(screen.getByText(/Keep it private/)).toBeInTheDocument();
     expect(screen.getByText(CREATED.hostUrl)).toBeInTheDocument();
+  });
+});
+
+describe('remembering the host link on this device', () => {
+  it('saves the host path when an event is created and lists it on the home page', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    render(<NewEventPage api={fakeApi()} copy={vi.fn(async () => {})} />);
+    await user.type(screen.getByLabelText('Group chat'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Read the chat' }));
+    await screen.findByRole('heading', { name: 'Check the details' });
+    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await screen.findByRole('heading', { name: /is ready/ });
+    expect(JSON.parse(localStorage.getItem('flakeproof.recentEvents')!)[0]).toMatchObject({ title: 'Court booking', hostPath: '/host/' + 'h'.repeat(32) });
+    expect(localStorage.getItem('flakeproof.recentEvents')).not.toContain('localhost'); // only the path, not an origin
+    cleanup();
+    render(<App path="/" search="" />);
+    expect(screen.getByRole('link', { name: /Court booking/ })).toHaveAttribute('href', '/host/' + 'h'.repeat(32));
+  });
+
+  it('ignores tampered or malformed stored data', () => {
+    localStorage.setItem('flakeproof.recentEvents', JSON.stringify([{ title: 'x', hostPath: 'javascript:alert(1)', createdAt: '' }, { title: 5 }, 'junk']));
+    render(<App path="/" search="" />);
+    expect(screen.queryByText(/Events you created/)).not.toBeInTheDocument();
+    localStorage.setItem('flakeproof.recentEvents', '{not json');
+    cleanup();
+    render(<App path="/" search="" />);
+    expect(screen.getByRole('link', { name: 'Host an event' })).toBeInTheDocument();
   });
 });
 

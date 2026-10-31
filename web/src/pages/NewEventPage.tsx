@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, hostApi, type CreatedEvent, type HostApi, type RsvpProposal } from '../api';
 import { centsToDollars, parseDollars } from '../lib/money';
 import { formatMoney } from '../lib/format';
+import { rememberEvent } from '../lib/recentEvents';
 
 const MAX_CHARS = 8000; // mirrors the server limit; the server enforces it
 const MAX_GUESTS = 12; // mirrors the server limit
@@ -88,6 +89,7 @@ export function NewEventPage({ api = hostApi, copy = (t) => navigator.clipboard.
         depositCents: depositCents!,
         guests: chosen.map((r) => ({ name: r.name.trim() })),
       });
+      rememberEvent(res.event.title, res.hostUrl);
       setCreated(res);
       setStep('created');
     } catch (e) {
@@ -258,7 +260,7 @@ function Created({ created, depositCents, startsAt, copy }: { created: CreatedEv
 
       <section className="mt-8 rounded-xl border border-hold-100 bg-hold-50 p-4 text-hold-800" aria-labelledby="host-h">
         <h2 id="host-h" className="font-semibold">Your host link. Keep it private.</h2>
-        <p className="mt-1 text-sm">It is the only way to mark who showed up and approve what happens to the money. There is no account to recover it from.</p>
+        <p className="mt-1 text-sm">It is the only way to mark who showed up and approve what happens to the money. There is no account to recover it from. This browser will also remember it, but save it somewhere safe.</p>
         <p className="mt-2 break-all rounded bg-white/70 p-2 text-sm">{created.hostUrl}</p>
         <button type="button" onClick={() => doCopy('host', created.hostUrl)} className={`${secondary} mt-2`}>{copied === 'host' ? 'Copied' : 'Copy host link'}</button>
       </section>

@@ -20,6 +20,13 @@ and the message is always safe to show to a person.
 
 ## Rules the server enforces
 
+- **Never capture money nobody could receive.** The host view carries `payoutPreview` (an ESTIMATE of what a
+  settlement would do right now, using the observed 3.49% + 49c capture fee): `{provisional, capturingCount,
+  recipientCount, estimatedPotCents, estimatedPerPersonCents, problem, unpayableNames}`. If the host chose
+  "capture" and nobody who came can be paid, or the share would be under the minimum, `blockers` says so and
+  `settle` is refused (409). Guests who paid but have no PayPal email are listed in `problems`. If a capture still
+  ends up unpayable, the event shows a `problems` entry; there is no automatic refund.
+
 - The host chooses the start time (any time in the future) and any positive deposit amount. There are no product limits. Because PayPal honors an authorization for 3 days, the host view carries a `warnings` entry when the event is further away than that. The only amount cap ($999,999.99) is technical: it keeps values safe to format as PayPal money.
 - Deposits are holds. Nothing is captured or voided until the host calls `settle`; the AI (later) only recommends.
 - `settle` is refused until the event has ended, every held guest has attendance, and every held no-show has a decision. After it starts, attendance and decisions are locked.
