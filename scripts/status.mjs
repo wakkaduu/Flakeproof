@@ -61,7 +61,7 @@ const leaked = envVals.filter((v) => sh(`git grep -qF -- ${JSON.stringify(v)} $(
 check(envVals.length === 0 || leaked.length === 0, 'No secret from .env appears anywhere in git history', envVals.length ? '' : '(.env not found, cannot compare)');
 check(/Before you start/.test(read('README.md')), 'README has a judge-first "Before you start" section');
 check(has('docs/screenshots') && readdirSync(resolve(root, 'docs/screenshots')).filter((f) => f.endsWith('.png')).length >= 3, 'README screenshots exist (3 or more)');
-check(!/sk-ant-|AIza[0-9A-Za-z_-]{30,}/.test(sh('git grep -hE "sk-ant-|AIza[0-9A-Za-z_-]{30,}" HEAD') ?? ''), 'No API-key-shaped strings in the committed code');
+check(!/sk-ant-|AIza[0-9A-Za-z_-]{30,}/.test(sh('git grep -hE "sk-ant-|AIza[0-9A-Za-z_-]{30,}" HEAD -- . ":!scripts/status.mjs"') ?? ''), 'No API-key-shaped strings in the committed code');
 
 // ---- repo public, licence detected, pushed
 const remote = sh('git remote get-url origin');
