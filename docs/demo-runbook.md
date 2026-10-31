@@ -40,11 +40,11 @@ the approval screen, not typing passwords. Keep the host in a separate window.
 4. Check the PayPal pages in the footage only show PayPal screens incidentally (no logos in our own UI).
 5. No copyrighted music. Record the screen of the device the app was built for.
 
-## Schedule (deadline per the third-party listing: Nov 13, 01:30 IST = Nov 13, 04:00 in UTC+8; PayPal's blog says Nov 12 closes, so we treat **Nov 12** as the real end and submit by **Nov 11**)
+## Schedule (confirmed by the Official Rules: submissions close **Nov 12, 2026, 12:00 pm Pacific = Nov 13, 04:00 in UTC+8**; we submit by **Nov 11**)
 
 | Dates | Work |
 |---|---|
-| Nov 1-3 | Step 5: host dashboard, check-ins, the Judge, host approval |
+| Nov 1-3 | Step 5: host dashboard, check-ins, the Judge, host approval (Design is a fifth of the score: build the dashboard properly) |
 | Nov 4 | Full real-sandbox run with the four accounts; fix what breaks |
 | Nov 5-6 | README polish, screenshots, Devpost text, video script |
 | Nov 7 | Feature freeze. Rehearse |

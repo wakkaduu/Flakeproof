@@ -100,12 +100,14 @@ More in [docs/security-notes.md](docs/security-notes.md), including known limits
 ## Docs
 
 [Sandbox setup](docs/sandbox-setup.md) · [API and AI guardrails](docs/api.md) · [Spike and live-check results](docs/spike-results.md) ·
-[Judge design](docs/judge-design.md) · [Security notes](docs/security-notes.md) · [Demo runbook and schedule](docs/demo-runbook.md)
+[Judge design](docs/judge-design.md) · [Security notes](docs/security-notes.md) · [Demo runbook and schedule](docs/demo-runbook.md) · [Official Rules notes](docs/official-rules-notes.md)
 
-## Unverified
+## Rules and what is still unverified
 
-The Official Rules of the hackathon have not been read by the author: eligibility, IP and legal terms
-(including whether pooling friends' deposits and paying them out is acceptable) are unchecked.
+The Official Rules were read on Oct 31 and are summarised, with our status against each, in
+[docs/official-rules-notes.md](docs/official-rules-notes.md). Submission period ends **Nov 12, 2026, 12:00 pm PT**.
+Not assessed: whether a service that pools friends' deposits could operate with real money (the Rules ask only for a
+sandbox integration; this project is sandbox only).
 
 ## License
 
