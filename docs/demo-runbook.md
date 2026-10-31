@@ -50,3 +50,34 @@ the approval screen, not typing passwords. Keep the host in a separate window.
 | Nov 7 | Feature freeze. Rehearse |
 | Nov 8-9 | Record and upload the video (public on YouTube) |
 | Nov 10-11 | Buffer, clean-clone check, submit |
+
+## Decisions made on Oct 31
+
+**Hosted demo URL: not now; decide at the Nov 8 gate.** The Rules accept a repo with complete run instructions, and judges
+may judge from the text, images and video alone. A hosted demo would need our PayPal and Gemini keys on a server, would burn
+a free-tier AI quota anyone can spend, and must stay up until Dec 15. Instead we make the repo easy to run and give judges a
+test pack (below). If time remains after the video, Render (a listed sponsor tool) is the likeliest host.
+
+**Judge test pack.** The Devpost testing-instructions field gets: the four sandbox buyer logins (fake money), a pointer to
+`docs/sandbox-setup.md` for creating a free Merchant app, and the Gemini key link. **No secret goes in the public repo.** If we
+decide to share our sandbox merchant secret, it goes only in that private field and is rotated after Dec 15.
+
+**Public repo.** `git@github.com:wakkaduu/flakeproof.git` is configured as `origin`. The repo must be created first (empty,
+public, **no** README or licence added by GitHub, since we already have them). Commit emails were switched to the GitHub no-reply
+address before anything was published. Run `npm run status` after pushing: it checks the repo is public and that GitHub detects MIT.
+
+## Video: Remotion and ElevenLabs
+
+- **Real footage is required.** The Rules ask for "footage that shows the Project functioning on the device for which it was built",
+  and the Presentation criterion is "working end to end". Use Remotion for titles, captions, zooms and transitions **around** real
+  screen recordings of the running app, never as an animated imitation of it.
+- **Remotion** is free for individuals and teams of up to 3 (it states this in its licence; Remotion 5.0 may change the terms, so
+  re-check). Its licence is not an OSI open-source licence, so keep it **out of this repo's `npm install`**: put the video project
+  in a separate folder or repo, not in the workspaces, so judges install nothing extra.
+- **ElevenLabs:** its help centre says the **free plan has no commercial licence**, and attribution does not change that. A
+  prize contest where PayPal and Devpost may reuse the video is not clearly non-commercial, so generate the final narration on a
+  **paid plan** (check the current price) while subscribed, keep the receipt, use a stock voice (do not clone yours), and say
+  "narration: ElevenLabs" in the video description.
+- **Voice rule.** Entrants consent to PayPal/Devpost using their voice in promotion for 3 years. A synthetic voice avoids using
+  yours. Captions are still needed for accessibility.
+- No third-party music. Do not show Google or Gemini logos in the footage.
