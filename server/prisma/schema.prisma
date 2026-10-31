@@ -68,7 +68,8 @@ model Payout {
   eventId            String   @unique
   senderBatchId      String   @unique
   paypalBatchId      String?
-  batchStatus        String   @default("NOT_SENT") // NOT_SENT | PayPal batch_status
+  batchStatus        String   @default("NOT_SENT") // NOT_SENT | SKIPPED | PayPal batch_status
+  skippedReason      String? // no_capture | no_recipients | pot_too_small
   potCents           Int // sum of capture nets
   feeReserveCents    Int // estimated payout fees held back
   distributableCents Int // what is split among attendees

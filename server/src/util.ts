@@ -1,0 +1,26 @@
+import { createHash, randomBytes } from 'node:crypto';
+
+/** Unguessable capability token (192 bits). */
+export const newToken = (): string => randomBytes(24).toString('base64url');
+export const hashToken = (t: string): string => createHash('sha256').update(t).digest('hex');
+
+/** Serializes async work per key (single process). Prevents double-click races on one record. */
+export class KeyedMutex {
+  private tails = new Map<string, Promise<unknown>>();
+  async run<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.tails.get(key) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(fn);
+    this.tails.set(key, next);
+    try {
+      return await next;
+    } finally {
+      if (this.tails.get(key) === next) this.tails.delete(key);
+    }
+  }
+}
+
+export function maskEmail(email: string | null): string | null {
+  if (!email) return null;
+  const [user = '', domain = ''] = email.split('@');
+  return `${user.slice(0, 2)}***@${domain}`;
+}

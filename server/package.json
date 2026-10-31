@@ -13,9 +13,9 @@
     "start": "node --env-file=../.env dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:generate": "node scripts/db.mjs generate",
+    "db:migrate": "node scripts/db.mjs migrate dev",
+    "db:deploy": "node scripts/db.mjs migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
