@@ -1,0 +1,13 @@
+{
+  "name": "showup",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A deposit that costs you nothing if you show up. PayPal sandbox + AI hackathon entry.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "spike": "node --env-file=.env scripts/spike/spike.mjs",
+    "spike:reset": "node scripts/spike/spike.mjs reset"
+  }
+}

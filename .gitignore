@@ -1,0 +1,26 @@
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies / build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Local database
+*.db
+*.db-journal
+prisma/*.db
+
+# Spike run state (contains sandbox IDs and buyer emails)
+.spike-state.json
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
