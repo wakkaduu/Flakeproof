@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
+import { AiError } from './ai/types.js';
 import { IllegalTransitionError } from './domain/stateMachine.js';
 import { PayPalError } from './paypal/errors.js';
 
@@ -31,6 +32,12 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     // Log diagnostics (never secrets); show only the safe message.
     console.error(`[paypal] ${err.kind} ${err.message} debugId=${err.detail.debugId ?? '-'} issue=${err.detail.issue ?? '-'}`);
     res.status(PAYPAL_STATUS[err.kind] ?? 502).json({ error: { code: `paypal_${err.kind}`, message: err.userMessage } });
+    return;
+  }
+  if (err instanceof AiError) {
+    console.error(`[ai] ${err.kind} ${err.message}`); // never the chat text
+    const status = { not_configured: 503, misconfigured: 502, unavailable: 503, invalid_output: 502, blocked: 422 }[err.kind];
+    res.status(status).json({ error: { code: `ai_${err.kind}`, message: err.userMessage } });
     return;
   }
   if (err instanceof IllegalTransitionError) {

@@ -8,6 +8,10 @@ export interface AppConfig {
   maxGuests: number;
   /** PayPal's recommended capture window after authorization. */
   honorPeriodDays: number;
+  /** Longest chat we will send to the AI. */
+  rsvpMaxChars: number;
+  /** RSVP parses allowed per client per minute (the AI key has a small free quota). */
+  rsvpPerMinute: number;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -18,6 +22,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   minPayoutPerPersonCents: 100,
   maxGuests: 12,
   honorPeriodDays: 3,
+  rsvpMaxChars: 8000,
+  rsvpPerMinute: 10,
 };
 
 const int = (def: number) => z.coerce.number().int().nonnegative().default(def);
@@ -31,6 +37,10 @@ const EnvSchema = z.object({
   PAYOUT_FEE_PER_ITEM_CENTS: int(DEFAULT_CONFIG.payoutFeePerItemCents),
   MIN_PAYOUT_PER_PERSON_CENTS: int(DEFAULT_CONFIG.minPayoutPerPersonCents),
   MAX_GUESTS: int(DEFAULT_CONFIG.maxGuests),
+  // AI is optional: without a key the host adds guests by hand.
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().trim().min(1).default('gemini-3.5-flash-lite'),
+  AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
 });
 
 export function loadEnv(env: NodeJS.ProcessEnv) {
@@ -42,5 +52,7 @@ export function loadEnv(env: NodeJS.ProcessEnv) {
     minPayoutPerPersonCents: e.MIN_PAYOUT_PER_PERSON_CENTS,
     maxGuests: e.MAX_GUESTS,
   };
-  return { config, port: e.PORT, databaseUrl: e.DATABASE_URL, clientId: e.PAYPAL_CLIENT_ID, clientSecret: e.PAYPAL_CLIENT_SECRET };
+  const key = e.GEMINI_API_KEY?.trim();
+  const gemini = key ? { apiKey: key, model: e.GEMINI_MODEL, timeoutMs: e.AI_TIMEOUT_MS } : null;
+  return { config, port: e.PORT, databaseUrl: e.DATABASE_URL, clientId: e.PAYPAL_CLIENT_ID, clientSecret: e.PAYPAL_CLIENT_SECRET, gemini };
 }

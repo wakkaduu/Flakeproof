@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import type { RsvpModel } from './ai/types.js';
 import type { AppConfig } from './config.js';
 import type { PayPalClient } from './paypal/types.js';
 import type { KeyedMutex } from './util.js';
@@ -7,6 +8,8 @@ import type { KeyedMutex } from './util.js';
 export interface Ctx {
   db: PrismaClient;
   paypal: PayPalClient;
+  /** null when no AI key is configured: the host adds guests by hand. */
+  rsvp: RsvpModel | null;
   config: AppConfig;
   mutex: KeyedMutex;
   now: () => Date;

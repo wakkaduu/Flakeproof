@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response, Router } from 'express';
 import { z } from 'zod';
 import type { Ctx } from './context.js';
-import { errorHandler, notFound } from './errors.js';
+import { AppError, errorHandler, notFound } from './errors.js';
 import { finalizeDeposit, getGuestView, startDeposit } from './services/deposits.js';
 import {
   CreateEventInput, createEvent, endEvent, hostView, loadHostEvent, markAttendance, setDecision,
 } from './services/events.js';
+import { parseRsvp } from './services/rsvp.js';
 import { settle } from './services/settlement.js';
+import { RateLimiter } from './util.js';
 
 const Token = z.string().min(16).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const Id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
@@ -25,8 +27,18 @@ export function createApp(ctx: Ctx, opts: { webDir?: string } = {}) {
     next();
   });
 
+  const rsvpLimiter = new RateLimiter(ctx.config.rsvpPerMinute, 60_000);
   const api = Router();
   api.get('/health', (_req, res) => { res.json({ ok: true }); });
+
+  // ---- AI: read a pasted chat and PROPOSE guests/amount/time. Creates nothing; the host reviews.
+  api.post('/rsvp/parse', async (req, res) => {
+    if (!rsvpLimiter.allow(req.ip ?? 'unknown')) {
+      res.setHeader('Retry-After', '30');
+      throw new AppError(429, 'rate_limited', 'Too many requests. Wait a moment and try again.');
+    }
+    res.json(await parseRsvp(ctx, req.body));
+  });
 
   // ---- host creates an event (no accounts: the host link IS the credential) ----
   api.post('/events', async (req, res) => {

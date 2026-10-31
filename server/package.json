@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=../.env dist/index.js",
     "typecheck": "tsc --noEmit",
+    "ai:smoke": "tsx --env-file=../.env scripts/ai-smoke.ts",
     "e2e:sandbox": "node scripts/e2e-sandbox.mjs",
     "test": "vitest run",
     "db:generate": "node scripts/db.mjs generate",

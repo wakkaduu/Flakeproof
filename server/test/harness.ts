@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { FakeRsvpModel } from '../src/ai/fake.js';
 import { createApp } from '../src/app.js';
 import { DEFAULT_CONFIG, type AppConfig } from '../src/config.js';
 import { FakePayPal } from '../src/paypal/fake.js';
@@ -14,6 +15,7 @@ const TEMPLATE_DB = join(tmpdir(), 'flakeproof-test', 'template.db');
 export interface Harness {
   base: string;
   paypal: FakePayPal;
+  rsvp: FakeRsvpModel;
   db: PrismaClient;
   config: AppConfig;
   clock: { now: Date };
@@ -31,9 +33,10 @@ export async function makeHarness(configOverride: Partial<AppConfig> = {}): Prom
   copyFileSync(TEMPLATE_DB, file);
   const db = new PrismaClient({ datasources: { db: { url: `file:${file}` } } });
   const paypal = new FakePayPal();
+  const rsvp = new FakeRsvpModel();
   const config = { ...DEFAULT_CONFIG, ...configOverride };
   const clock = { now: new Date('2026-11-01T12:00:00Z') };
-  const app = createApp({ db, paypal, config, mutex: new KeyedMutex(), now: () => clock.now });
+  const app = createApp({ db, paypal, rsvp, config, mutex: new KeyedMutex(), now: () => clock.now });
   const server: Server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
@@ -67,7 +70,7 @@ export async function makeHarness(configOverride: Partial<AppConfig> = {}): Prom
   };
 
   return {
-    base, paypal, db, config, clock, api, createEvent, deposit,
+    base, paypal, rsvp, db, config, clock, api, createEvent, deposit,
     close: async () => {
       await new Promise<void>((r) => server.close(() => r()));
       await db.$disconnect();
