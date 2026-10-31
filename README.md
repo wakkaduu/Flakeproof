@@ -52,7 +52,7 @@ You need three things. Without them you can still run `npm test` (no keys needed
 ```bash
 cp .env.example .env     # fill in PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, GEMINI_API_KEY
 npm run setup            # install, generate the Prisma client, create the SQLite database
-npm test                 # 181 tests (128 server, 53 web), no keys needed
+npm test                 # 194 tests (139 server, 55 web), no keys needed
 npm run dev              # API on :3001, web app on http://localhost:5173
 ```
 
@@ -65,6 +65,7 @@ Checks that talk to the **real** services (they print a report you can read):
 ```bash
 npm run e2e:sandbox          # the whole server flow on the PayPal sandbox: 3 friends, 1 flakes, pot paid to the 2 who came
 npm run ai:smoke -w server   # the real Gemini model on a sample chat (needs GEMINI_API_KEY)
+npm run ai:eval -w server    # 15 adversarial cases against the real model, ~4 minutes (needs GEMINI_API_KEY)
 npm run spike                # raw PayPal calls: authorize, capture, void, payout
 ```
 
@@ -93,7 +94,7 @@ checked against the pasted chat in code first (see [docs/api.md](docs/api.md)).
 | Host dashboard: end the event, check-ins, AI suggestions, decisions, approve and settle, live holds and payout progress | Built; 18 component tests. **Driven in a real browser through the full story** (three came, one flaked, AI suggested, host charged, three paid) against the real server and real Gemini, with an in-memory PayPal. Not yet clicked through by a person on the real sandbox with four accounts |
 | Guest link page (mobile first) | Built; 35 web tests. **Driven in a real headless browser at phone width**: renders, no console errors, and "Approve with PayPal" reaches PayPal's sandbox. The approval-and-return leg was not completed by automation |
 | RSVP agent: paste chat, verified proposal, host review, invite links | Built. Real Gemini checked live, including prompt-injection and invented-guest cases |
-| AI Judge: verified recommendations, never pre-selected | Built. Real Gemini checked live (3 of 3 runs): a real excuse gets forgive with a verified quote, a casual one gets charge, a message that talks to the AI is flagged and left to the host |
+| AI Judge: verified recommendations, never pre-selected, with timing facts computed in code | Built. **Real Gemini evaluated on 15 adversarial cases, all passing on every run** ([results](docs/spike-results.md)): a real excuse gets forgive with a verified quote, a casual one gets charge, text addressed to the AI (even smuggled in as a fake `SYSTEM:` line) is flagged and left to the host |
 | Tests with a fake PayPal and a fake AI | Done |
 
 Paths that exist in code but were **never run against the real PayPal sandbox** (only fakes or a local stub):
