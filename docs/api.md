@@ -19,7 +19,7 @@ and the message is always safe to show to a person.
 
 ## Rules the server enforces
 
-- Events must start within `MAX_EVENT_LEAD_HOURS` (default 72h) because PayPal honors an authorization for 3 days.
+- The host chooses the start time (any time in the future) and any positive deposit amount. There are no product limits. Because PayPal honors an authorization for 3 days, the host view carries a `warnings` entry when the event is further away than that. The only amount cap ($999,999.99) is technical: it keeps values safe to format as PayPal money.
 - Deposits are holds. Nothing is captured or voided until the host calls `settle`; the AI (later) only recommends.
 - `settle` is refused until the event has ended, every held guest has attendance, and every held no-show has a decision. After it starts, attendance and decisions are locked.
 - Order of operations: void (showed + forgiven) -> capture (chosen no-shows) -> payout.
@@ -33,5 +33,6 @@ and the message is always safe to show to a person.
 - Single server process; no auth beyond capability links; no rate limiting on `POST /api/events`.
 - Payouts go to the PayPal email each guest paid with. A guest who never deposited cannot be paid.
 - An unapproved order is not recreated if PayPal expires it.
-- Reauthorization after the 3-day honor period is not implemented; `settle` still tries to capture and the host view warns.
+- Reauthorization after the 3-day honor period is not implemented. For events further out than 3 days, `settle` still tries to capture, but PayPal may refuse, and the host view warns both at creation and at settlement.
+- Very small deposits are mostly eaten by PayPal's fixed fee (about 49c plus 3.49% in the sandbox); when the pot is too small to split, nothing is paid out and the event says so.
 - Payout fee reserve is a flat estimate (25c/item, from one sandbox observation).

@@ -64,6 +64,21 @@ const PayoutBatchSchema = z.object({
   })).optional(),
 });
 
+/** The approval link is sent to a person's browser: refuse anything that is not https on paypal.com. */
+export function safeApprovalUrl(href: string): string {
+  let url: URL;
+  try { url = new URL(href); } catch { throw new PayPalError('unexpected_response', 'Approval link is not a valid URL'); }
+  const hostOk = url.hostname === 'paypal.com' || url.hostname.endsWith('.paypal.com');
+  if (url.protocol !== 'https:' || !hostOk) throw new PayPalError('unexpected_response', `Approval link has unexpected host ${url.hostname}`);
+  return url.toString();
+}
+
+/** Fee/net are advisory. If PayPal sends something we cannot parse after money moved, say "unknown", don't fail the capture. */
+function tryMoney(m: { value: string } | undefined): number | null {
+  if (!m) return null;
+  try { return parseMoney(m.value); } catch { return null; }
+}
+
 export class RealPayPalClient implements PayPalClient {
   private readonly base: string;
   private readonly doFetch: typeof fetch;
@@ -203,7 +218,7 @@ export class RealPayPalClient implements PayPalClient {
     });
     const link = o.links?.find((l) => l.rel === 'payer-action') ?? o.links?.find((l) => l.rel === 'approve');
     if (!link) throw new PayPalError('unexpected_response', 'Order has no approval link');
-    return { orderId: o.id, status: o.status, approveUrl: link.href };
+    return { orderId: o.id, status: o.status, approveUrl: safeApprovalUrl(link.href) };
   }
 
   async getOrder(orderId: string): Promise<OrderInfo> {
@@ -235,8 +250,8 @@ export class RealPayPalClient implements PayPalClient {
       status: c.status,
       amountCents: parseMoney(c.amount.value),
       currency: c.amount.currency_code,
-      feeCents: b?.paypal_fee ? parseMoney(b.paypal_fee.value) : null,
-      netCents: b?.net_amount ? parseMoney(b.net_amount.value) : null,
+      feeCents: tryMoney(b?.paypal_fee),
+      netCents: tryMoney(b?.net_amount),
       netCurrency: b?.net_amount?.currency_code ?? null,
     };
   }
@@ -297,7 +312,7 @@ export class RealPayPalClient implements PayPalClient {
         senderItemId: it.payout_item?.sender_item_id ?? null,
         payoutItemId: it.payout_item_id,
         status: it.transaction_status,
-        feeCents: it.payout_item_fee ? parseMoney(it.payout_item_fee.value) : null,
+        feeCents: tryMoney(it.payout_item_fee),
         errorName: it.errors?.name ?? null,
       })),
     };

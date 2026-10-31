@@ -277,16 +277,65 @@ describe('money safety', () => {
   });
 });
 
+describe('host chooses the start time and amount freely', () => {
+  const create = (over: object) => h.api('POST', '/api/events', {
+    title: 'x', startsAt: new Date(h.clock.now.getTime() + 3_600_000).toISOString(), depositCents: 2000, guests: [{ name: 'A' }], ...over,
+  });
+
+  it('accepts any future start time, with an honest warning beyond the honor period', async () => {
+    const near = await create({});
+    expect(near.status).toBe(201);
+    expect(near.body.event.warnings).toEqual([]);
+    const far = await create({ startsAt: new Date(h.clock.now.getTime() + 20 * 86_400_000).toISOString() });
+    expect(far.status).toBe(201);
+    expect(far.body.event.warnings[0]).toContain('3 days');
+  });
+
+  it('accepts any positive amount, small or large', async () => {
+    for (const depositCents of [1, 99, 500, 2000, 50_000, 5_000_000]) {
+      const r = await create({ depositCents });
+      expect(r.status).toBe(201);
+      expect(r.body.event.depositCents).toBe(depositCents);
+    }
+  });
+
+  it('a large deposit flows through the same math', async () => {
+    const ev = await h.createEvent({ names: ['Ana', 'Ben'], depositCents: 500_000 });
+    for (const g of ev.guests) await h.deposit(g.invite);
+    await h.api('POST', `/api/host/${ev.hostToken}/end`);
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[0]!.id}/attendance`, { attendance: 'showed' });
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/attendance`, { attendance: 'no_show' });
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/decision`, { decision: 'capture' });
+    const r = await h.api('POST', `/api/host/${ev.hostToken}/settle`, { approve: true });
+    // $5,000.00: fee 3.49% = 17,450c + 49c = 17,499c ; net 482,501c ; minus the 25c reserve
+    expect(r.body.guests[1].deposit).toMatchObject({ feeCents: 17_499, netCents: 482_501 });
+    expect(r.body.guests[0].payout.amountCents).toBe(482_501 - 25);
+  });
+
+  it('a tiny deposit does not crash: the pot is too small to pay out and the event still settles', async () => {
+    const ev = await h.createEvent({ names: ['Ana', 'Ben'], depositCents: 100 });
+    for (const g of ev.guests) await h.deposit(g.invite);
+    await h.api('POST', `/api/host/${ev.hostToken}/end`);
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[0]!.id}/attendance`, { attendance: 'showed' });
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/attendance`, { attendance: 'no_show' });
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/decision`, { decision: 'capture' });
+    const r = await h.api('POST', `/api/host/${ev.hostToken}/settle`, { approve: true });
+    expect(r.status).toBe(200);
+    expect(r.body.payout).toMatchObject({ status: 'SKIPPED', skippedReason: 'pot_too_small' });
+    expect(r.body.status).toBe('settled');
+  });
+});
+
 describe('boundaries and access', () => {
   it('validates event creation', async () => {
     const bad = (over: object) => h.api('POST', '/api/events', {
       title: 'x', startsAt: new Date(h.clock.now.getTime() + 3_600_000).toISOString(), depositCents: 2000, guests: [{ name: 'A' }], ...over,
     });
     expect((await bad({ startsAt: '2026-10-01T00:00:00Z' })).body.error.code).toBe('event_in_past');
-    expect((await bad({ startsAt: new Date(h.clock.now.getTime() + 100 * 3_600_000).toISOString() })).body.error.code).toBe('event_too_far');
-    expect((await bad({ depositCents: 100 })).body.error.code).toBe('deposit_out_of_range');
-    expect((await bad({ depositCents: 999999 })).body.error.code).toBe('deposit_out_of_range');
+    expect((await bad({ depositCents: 0 })).status).toBe(400);
+    expect((await bad({ depositCents: -500 })).status).toBe(400);
     expect((await bad({ depositCents: 20.5 })).status).toBe(400);
+    expect((await bad({ depositCents: 100_000_000 })).status).toBe(400); // beyond what PayPal money strings can safely carry
     expect((await bad({ guests: [{ name: 'A' }, { name: 'a' }] })).body.error.code).toBe('duplicate_guest');
     expect((await bad({ guests: [] })).status).toBe(400);
     expect((await bad({ title: '   ' })).status).toBe(400);

@@ -13,7 +13,9 @@ import {
 export const CreateEventInput = z.object({
   title: z.string().trim().min(1).max(120),
   startsAt: z.iso.datetime({ offset: true }),
-  depositCents: z.number().int(),
+  // No product limits on the amount. The ceiling only keeps the value inside what we can
+  // format and parse safely as PayPal money ($999,999.99).
+  depositCents: z.number().int().min(1).max(99_999_999),
   guests: z.array(z.object({ name: z.string().trim().min(1).max(60) })).min(1),
 });
 export type CreateEventInput = z.infer<typeof CreateEventInput>;
@@ -22,14 +24,7 @@ export async function createEvent(ctx: Ctx, input: CreateEventInput) {
   const { config } = ctx;
   const startsAt = new Date(input.startsAt);
   const now = ctx.now();
-  const horizon = new Date(now.getTime() + config.maxEventLeadHours * 3_600_000);
-  if (startsAt <= now) throw new AppError(400, 'event_in_past', 'The event must be in the future.');
-  if (startsAt > horizon) {
-    throw new AppError(400, 'event_too_far', `Deposits are holds that PayPal honors for ${config.honorPeriodDays} days, so events must start within ${config.maxEventLeadHours} hours.`);
-  }
-  if (input.depositCents < config.minDepositCents || input.depositCents > config.maxDepositCents) {
-    throw new AppError(400, 'deposit_out_of_range', `Deposit must be between ${config.minDepositCents} and ${config.maxDepositCents} cents.`);
-  }
+  if (startsAt <= now) throw new AppError(400, 'event_in_past', 'The event must start in the future.');
   if (input.guests.length > config.maxGuests) throw new AppError(400, 'too_many_guests', `At most ${config.maxGuests} guests.`);
   const names = input.guests.map((g) => g.name.toLowerCase());
   if (new Set(names).size !== names.length) throw new AppError(400, 'duplicate_guest', 'Guest names must be different so people can tell each other apart.');
@@ -145,6 +140,13 @@ export function hostView(ctx: Ctx, ev: EventFull) {
     };
   });
   const blockers = ev.settlementStartedAt ? [] : settlementBlockers(ev);
+  // Not limits, just honesty: the host may pick any start time, but PayPal only guarantees a
+  // hold for its honor period. Reauthorization is not built.
+  const warnings: string[] = [];
+  const daysAway = (ev.startsAt.getTime() - now) / 86_400_000;
+  if (ev.status === 'open' && daysAway > ctx.config.honorPeriodDays) {
+    warnings.push(`This event starts in about ${Math.ceil(daysAway)} days. PayPal only guarantees a hold for ${ctx.config.honorPeriodDays} days, so a deposit placed now may no longer be capturable after the event.`);
+  }
   return {
     id: ev.id,
     title: ev.title,
@@ -155,6 +157,7 @@ export function hostView(ctx: Ctx, ev: EventFull) {
     settlementApproved: ev.settlementStartedAt !== null,
     canSettle: ev.status === 'ended' && blockers.length === 0,
     blockers,
+    warnings,
     problems,
     guests,
     payout: ev.payout && {

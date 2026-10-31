@@ -5,9 +5,6 @@ export interface AppConfig {
   currency: string;
   payoutFeePerItemCents: number;
   minPayoutPerPersonCents: number;
-  minDepositCents: number;
-  maxDepositCents: number;
-  maxEventLeadHours: number;
   maxGuests: number;
   /** PayPal's recommended capture window after authorization. */
   honorPeriodDays: number;
@@ -19,9 +16,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   // 25c/item is what the sandbox charged once at $5.00; the real fee is recorded after payout.
   payoutFeePerItemCents: 25,
   minPayoutPerPersonCents: 100,
-  minDepositCents: 500,
-  maxDepositCents: 10_000,
-  maxEventLeadHours: 72,
   maxGuests: 12,
   honorPeriodDays: 3,
 };
@@ -36,9 +30,6 @@ const EnvSchema = z.object({
   PAYPAL_CLIENT_SECRET: z.string().min(1, 'PAYPAL_CLIENT_SECRET is required (sandbox)'),
   PAYOUT_FEE_PER_ITEM_CENTS: int(DEFAULT_CONFIG.payoutFeePerItemCents),
   MIN_PAYOUT_PER_PERSON_CENTS: int(DEFAULT_CONFIG.minPayoutPerPersonCents),
-  MIN_DEPOSIT_CENTS: int(DEFAULT_CONFIG.minDepositCents),
-  MAX_DEPOSIT_CENTS: int(DEFAULT_CONFIG.maxDepositCents),
-  MAX_EVENT_LEAD_HOURS: int(DEFAULT_CONFIG.maxEventLeadHours),
   MAX_GUESTS: int(DEFAULT_CONFIG.maxGuests),
 });
 
@@ -49,9 +40,6 @@ export function loadEnv(env: NodeJS.ProcessEnv) {
     appBaseUrl: e.APP_BASE_URL.replace(/\/$/, ''),
     payoutFeePerItemCents: e.PAYOUT_FEE_PER_ITEM_CENTS,
     minPayoutPerPersonCents: e.MIN_PAYOUT_PER_PERSON_CENTS,
-    minDepositCents: e.MIN_DEPOSIT_CENTS,
-    maxDepositCents: e.MAX_DEPOSIT_CENTS,
-    maxEventLeadHours: e.MAX_EVENT_LEAD_HOURS,
     maxGuests: e.MAX_GUESTS,
   };
   return { config, port: e.PORT, databaseUrl: e.DATABASE_URL, clientId: e.PAYPAL_CLIENT_ID, clientSecret: e.PAYPAL_CLIENT_SECRET };

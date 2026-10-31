@@ -18,7 +18,7 @@ After the event:
 - The captured pot is **paid out** (PayPal Payouts) to the people who came.
 
 Meant for events where a no-show costs the host real money. Not casual hangouts.
-Because PayPal authorizations have a 3-day honor period, events are scoped to ~3 days out.
+PayPal honors an authorization for 3 days (valid 29, reauthorization not built). The host may pick any start time, but the app warns when an event is further out than the honor period, because capture may then be refused.
 
 ## How AI is used (planned, not built)
 
