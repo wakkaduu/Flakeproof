@@ -146,7 +146,7 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
           type="button"
           onClick={onApprove}
           disabled={busy !== null}
-          className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-ink px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-showup-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-ink px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-good-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {busy === 'starting' ? 'Opening PayPal…' : 'Approve with PayPal'}
         </button>
@@ -233,7 +233,7 @@ function HowItWorks({ amount }: { amount: string }) {
 function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-showup-100 text-sm font-semibold text-showup-800" aria-hidden="true">{n}</span>
+      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-good-100 text-sm font-semibold text-good-800" aria-hidden="true">{n}</span>
       <span>{children}</span>
     </li>
   );
@@ -242,7 +242,7 @@ function Step({ n, children }: { n: number; children: ReactNode }) {
 const TONES = {
   neutral: 'bg-white border-line',
   hold: 'bg-hold-50 border-hold-100 text-hold-800',
-  good: 'bg-showup-50 border-showup-100 text-showup-800',
+  good: 'bg-good-50 border-good-100 text-good-800',
   charged: 'bg-charged-50 border-charged-100 text-charged-800',
 } as const;
 
@@ -261,7 +261,7 @@ function Banner({ tone, children }: { tone: 'info' | 'warn'; children: ReactNode
 function Shell({ children }: { children: ReactNode }) {
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-12 pt-[max(1.5rem,env(safe-area-inset-top))]">
-      <p className="mb-6 text-sm font-bold tracking-tight text-showup-700">ShowUp</p>
+      <p className="mb-6 text-sm font-bold tracking-tight text-good-700">Flakeproof</p>
       {children}
     </main>
   );

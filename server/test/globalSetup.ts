@@ -4,10 +4,10 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-export const TEMPLATE_DB = join(tmpdir(), 'showup-test', 'template.db');
+export const TEMPLATE_DB = join(tmpdir(), 'flakeproof-test', 'template.db');
 
 export default function setup() {
-  mkdirSync(join(tmpdir(), 'showup-test'), { recursive: true });
+  mkdirSync(join(tmpdir(), 'flakeproof-test'), { recursive: true });
   rmSync(TEMPLATE_DB, { force: true });
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
     cwd: resolve(import.meta.dirname, '..'),

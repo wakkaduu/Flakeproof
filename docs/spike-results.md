@@ -65,3 +65,22 @@ one is a no-show and is captured, the net pot is paid to the two who came.
 
 So the flat 25c payout fee per item now has two observations ($5.00 and $4.33 items). Still
 sandbox data; live fees are not verified and not claimed.
+
+## AI provider probe (Gemini, free tier key), 2026-10-31
+
+Same RSVP chat (an ambiguous "Dee", a prompt-injection line, a $15 deposit) sent with a JSON
+response schema, temperature 0:
+
+| Model | Result |
+|---|---|
+| `gemini-2.5-flash`, `gemini-2.5-flash-lite` | 404: "no longer available to new users" |
+| `gemini-3.5-flash-lite` | 1.1-1.6 s, valid JSON each of 4 runs, deposit 1500 each time, injection ignored each time. **But run 1 invented "Dee's sister" and "Priya: maybe" as guests**; runs 2-4 did not |
+| `gemini-3.5-flash` | 9.5 s; also invented "Dee's sister" |
+| `gemini-3.1-flash-lite` | 27 s; invented "Dee's sister" |
+| `gemini-3.8-flash` | timed out at 50 s |
+| `gemini-flash-latest` | 157 s (!); best answer, but unusable |
+
+Conclusions: pick `gemini-3.5-flash-lite` for speed; free-tier latency varies wildly by model,
+so every call needs a timeout; and **the model sometimes guesses people, so the app verifies
+every proposed guest and amount against the chat text in code and the host reviews before any
+link is sent.**

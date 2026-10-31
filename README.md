@@ -1,4 +1,4 @@
-# ShowUp
+# Flakeproof
 
 > A deposit that costs you nothing if you show up.
 
@@ -24,8 +24,8 @@ PayPal honors an authorization for 3 days (valid 29, reauthorization not built).
 
 | Role | What it does | Model / service |
 |---|---|---|
-| RSVP agent | Reads pasted group-chat text, proposes guest list, details and deposit; asks when unsure | Claude via `@anthropic-ai/sdk` (model name from env var, to be filled in when built) |
-| Judge | After the event, recommends capture or forgive per no-show, with a reason. **The host approves before any money moves.** | same |
+| RSVP agent | Reads pasted group-chat text, proposes guest list, details and deposit; asks when unsure | Google Gemini API (`GEMINI_MODEL`, currently `gemini-3.5-flash-lite`) |
+| Judge | After the event, recommends capture or forgive per no-show, with a reason. **The host approves before any money moves.** | same model |
 
 The model only reads and recommends. Amounts, splits and rounding are plain code in integer cents.
 

@@ -333,7 +333,7 @@ describe('serving the web app', () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
-    const dir = mkdtempSync(join(tmpdir(), 'showup-web-'));
+    const dir = mkdtempSync(join(tmpdir(), 'flakeproof-web-'));
     writeFileSync(join(dir, 'index.html'), '<!doctype html><title>app</title>');
     const { createApp } = await import('../src/app.js');
     const { KeyedMutex } = await import('../src/util.js');

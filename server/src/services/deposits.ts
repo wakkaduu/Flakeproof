@@ -52,7 +52,7 @@ export async function startDeposit(ctx: Ctx, inviteToken: string): Promise<{ app
     }
     // The server decides the amount. Nothing about it comes from the browser.
     const order = await ctx.paypal.createAuthorizeOrder({
-      requestId: `showup-order-${g.id}`, // one order per guest, safely retryable
+      requestId: `flakeproof-order-${g.id}`, // one order per guest, safely retryable
       referenceId: g.id,
       description: `Deposit for ${g.event.title}`.slice(0, 120),
       amountCents: g.event.depositCents,
@@ -86,12 +86,12 @@ export async function finalizeDeposit(ctx: Ctx, inviteToken: string) {
     if (order.status !== 'APPROVED' && order.status !== 'COMPLETED') {
       throw conflict('not_approved', "You haven't approved the payment on PayPal yet.");
     }
-    const auth = await ctx.paypal.authorizeOrder({ requestId: `showup-authorize-${dep.id}`, orderId: dep.orderId });
+    const auth = await ctx.paypal.authorizeOrder({ requestId: `flakeproof-authorize-${dep.id}`, orderId: dep.orderId });
 
     const exact = auth.status === 'CREATED' && auth.amountCents === dep.amountCents && auth.currency === dep.currency;
     if (!exact) {
       // Never trust a hold that is not exactly what we asked for. Release it and stop.
-      await ctx.paypal.voidAuthorization({ requestId: `showup-void-mismatch-${dep.id}`, authorizationId: auth.authorizationId }).catch((e) => {
+      await ctx.paypal.voidAuthorization({ requestId: `flakeproof-void-mismatch-${dep.id}`, authorizationId: auth.authorizationId }).catch((e) => {
         console.error('[deposit] could not void a mismatched authorization', auth.authorizationId, e instanceof Error ? e.message : e);
       });
       console.error(`[deposit] authorization mismatch deposit=${dep.id} status=${auth.status} amount=${auth.amountCents} ${auth.currency}`);

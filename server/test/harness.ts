@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG, type AppConfig } from '../src/config.js';
 import { FakePayPal } from '../src/paypal/fake.js';
 import { KeyedMutex } from '../src/util.js';
 
-const TEMPLATE_DB = join(tmpdir(), 'showup-test', 'template.db');
+const TEMPLATE_DB = join(tmpdir(), 'flakeproof-test', 'template.db');
 
 export interface Harness {
   base: string;
@@ -26,7 +26,7 @@ export interface Harness {
 }
 
 export async function makeHarness(configOverride: Partial<AppConfig> = {}): Promise<Harness> {
-  const dir = mkdtempSync(join(tmpdir(), 'showup-db-'));
+  const dir = mkdtempSync(join(tmpdir(), 'flakeproof-db-'));
   const file = join(dir, 'test.db');
   copyFileSync(TEMPLATE_DB, file);
   const db = new PrismaClient({ datasources: { db: { url: `file:${file}` } } });

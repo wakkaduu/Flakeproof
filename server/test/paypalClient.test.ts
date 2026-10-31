@@ -46,13 +46,13 @@ describe('RealPayPalClient', () => {
   it('creates an authorize order, sends request id, caches the token', async () => {
     handler = (_r, res) => json(res, 200, { id: 'O1', status: 'PAYER_ACTION_REQUIRED', links: [{ rel: 'self', href: 'x' }, { rel: 'payer-action', href: 'https://www.sandbox.paypal.com/approve' }] });
     const c = client();
-    const input = { requestId: 'showup-order-d1', referenceId: 'd1', description: 'Deposit', amountCents: 2000, currency: 'USD', returnUrl: 'https://app/r', cancelUrl: 'https://app/c' };
+    const input = { requestId: 'flakeproof-order-d1', referenceId: 'd1', description: 'Deposit', amountCents: 2000, currency: 'USD', returnUrl: 'https://app/r', cancelUrl: 'https://app/c' };
     const o = await c.createAuthorizeOrder(input);
     await c.createAuthorizeOrder(input);
     expect(o).toEqual({ orderId: 'O1', status: 'PAYER_ACTION_REQUIRED', approveUrl: 'https://www.sandbox.paypal.com/approve' });
     expect(tokenCalls).toBe(1);
     const post = seen.find((s) => s.url === '/v2/checkout/orders')!;
-    expect(post.headers['paypal-request-id']).toBe('showup-order-d1');
+    expect(post.headers['paypal-request-id']).toBe('flakeproof-order-d1');
     expect(post.headers.authorization).toBe('Bearer tok');
     const body = JSON.parse(post.body);
     expect(body.intent).toBe('AUTHORIZE');

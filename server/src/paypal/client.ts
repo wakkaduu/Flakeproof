@@ -206,7 +206,7 @@ export class RealPayPalClient implements PayPalClient {
         payment_source: {
           paypal: {
             experience_context: {
-              brand_name: 'ShowUp',
+              brand_name: 'Flakeproof',
               shipping_preference: 'NO_SHIPPING',
               user_action: 'PAY_NOW',
               return_url: i.returnUrl,

@@ -1,5 +1,5 @@
 {
-  "name": "showup",
+  "name": "flakeproof",
   "version": "0.0.0",
   "private": true,
   "description": "A deposit that costs you nothing if you show up. PayPal sandbox + AI hackathon entry.",

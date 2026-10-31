@@ -1,4 +1,4 @@
-// Typed client for the ShowUp server. The server decides every amount; the browser only
+// Typed client for the Flakeproof server. The server decides every amount; the browser only
 // ever sends "start" and "confirm", never a price.
 
 export type GuestStage = 'invited' | 'authorized' | 'showed' | 'no_show' | 'voided' | 'captured' | 'paid_out';

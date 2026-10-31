@@ -15,7 +15,7 @@ export function App({ path = window.location.pathname, search = window.location.
 function Home() {
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 py-10">
-      <p className="text-sm font-bold tracking-tight text-showup-700">ShowUp</p>
+      <p className="text-sm font-bold tracking-tight text-good-700">Flakeproof</p>
       <h1 className="mt-4 text-3xl font-bold tracking-tight">A deposit that costs you nothing if you show up.</h1>
       <p className="mt-3 text-ink-soft">Open the invite link your host sent you to confirm your spot.</p>
     </main>

@@ -77,7 +77,7 @@ export async function settle(ctx: Ctx, hostToken: string): Promise<EventFull> {
 
 async function voidDeposit(ctx: Ctx, g: GuestFull) {
   const dep = g.deposit!;
-  await ctx.paypal.voidAuthorization({ requestId: `showup-void-${dep.id}`, authorizationId: dep.authorizationId! });
+  await ctx.paypal.voidAuthorization({ requestId: `flakeproof-void-${dep.id}`, authorizationId: dep.authorizationId! });
   assertDepositTransition('authorized', 'voided');
   await ctx.db.deposit.update({ where: { id: dep.id }, data: { status: 'voided' } });
 }
@@ -86,7 +86,7 @@ async function captureDeposit(ctx: Ctx, g: GuestFull) {
   const dep = g.deposit!;
   // The amount is our own record, never anything from a request.
   const cap = await ctx.paypal.captureAuthorization({
-    requestId: `showup-capture-${dep.id}`,
+    requestId: `flakeproof-capture-${dep.id}`,
     authorizationId: dep.authorizationId!,
     amountCents: dep.amountCents,
     currency: dep.currency,
@@ -148,7 +148,7 @@ async function ensurePayout(ctx: Ctx, ev: EventFull) {
     await ctx.db.payout.create({
       data: {
         eventId: ev.id,
-        senderBatchId: `showup-${ev.id}`,
+        senderBatchId: `flakeproof-${ev.id}`,
         potCents: plan.potCents,
         feeReserveCents: plan.feeReserveCents,
         distributableCents: plan.distributableCents,
@@ -164,7 +164,7 @@ async function ensurePayout(ctx: Ctx, ev: EventFull) {
   if (payout.batchStatus !== 'NOT_SENT') return;
 
   const sent = await ctx.paypal.createPayout({
-    requestId: `showup-payout-${ev.id}`,
+    requestId: `flakeproof-payout-${ev.id}`,
     senderBatchId: payout.senderBatchId,
     currency: ev.currency,
     emailSubject: `Your share from "${ev.title}"`.slice(0, 120),
@@ -172,7 +172,7 @@ async function ensurePayout(ctx: Ctx, ev: EventFull) {
       senderItemId: it.id,
       receiverEmail: it.receiverEmail,
       amountCents: it.amountCents,
-      note: `ShowUp: your share of the no-show pot for ${ev.title}`.slice(0, 200),
+      note: `Flakeproof: your share of the no-show pot for ${ev.title}`.slice(0, 200),
     })),
   });
   await ctx.db.$transaction([

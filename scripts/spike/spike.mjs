@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ShowUp sandbox spike. Answers one question: does the money flow actually work?
+// Flakeproof sandbox spike. Answers one question: does the money flow actually work?
 //
 //   1. Create two AUTHORIZE orders (deposit A, deposit B) -> you approve both as the buyer
 //   2. Authorize both (a hold; nothing is charged)
@@ -176,11 +176,11 @@ async function run() {
     state = { runId: randomUUID().slice(0, 8), startedAt: new Date().toISOString(), steps: {}, orders: {}, auth: {} };
     await saveState(state);
   }
-  const rid = (suffix) => `showup-spike-${state.runId}-${suffix}`;
+  const rid = (suffix) => `flakeproof-spike-${state.runId}-${suffix}`;
   const amount = { currency_code: cfg.currency, value: centsToValue(cfg.depositCents) };
   const L = ['A', 'B']; // A = no-show (captured), B = showed up (voided)
 
-  console.log(`\nShowUp sandbox spike  run=${state.runId}  host=${baseUrl()}  deposit=${amount.value} ${amount.currency_code}\n`);
+  console.log(`\nFlakeproof sandbox spike  run=${state.runId}  host=${baseUrl()}  deposit=${amount.value} ${amount.currency_code}\n`);
 
   // 0. credentials
   await step(state, '0 oauth token', async () => {
@@ -199,14 +199,14 @@ async function run() {
           purchase_units: [
             {
               reference_id: `spike-${state.runId}-${l}`,
-              description: 'ShowUp spike deposit hold',
+              description: 'Flakeproof spike deposit hold',
               amount,
             },
           ],
           payment_source: {
             paypal: {
               experience_context: {
-                brand_name: 'ShowUp (sandbox spike)',
+                brand_name: 'Flakeproof (sandbox spike)',
                 shipping_preference: 'NO_SHIPPING',
                 user_action: 'PAY_NOW',
                 return_url: cfg.returnUrl,
@@ -282,7 +282,7 @@ async function run() {
     const r = await must(cfg, [200, 201], 'POST', `/v2/payments/authorizations/${state.auth.A.id}/capture`, {
       requestId: rid('capture-A'),
       prefer: 'return=representation',
-      body: { amount, final_capture: true, invoice_id: `spike-${state.runId}-A`, note_to_payer: 'ShowUp sandbox spike' },
+      body: { amount, final_capture: true, invoice_id: `spike-${state.runId}-A`, note_to_payer: 'Flakeproof sandbox spike' },
     });
     const d = r.data;
     const okAmount = d.amount?.currency_code === amount.currency_code && valueToCents(d.amount.value) === cfg.depositCents;
@@ -302,7 +302,7 @@ async function run() {
     const r = await must(cfg, [200, 201], 'POST', `/v2/payments/authorizations/${state.auth.A.id}/capture`, {
       requestId: rid('capture-A'),
       prefer: 'return=representation',
-      body: { amount, final_capture: true, invoice_id: `spike-${state.runId}-A`, note_to_payer: 'ShowUp sandbox spike' },
+      body: { amount, final_capture: true, invoice_id: `spike-${state.runId}-A`, note_to_payer: 'Flakeproof sandbox spike' },
     });
     const same = r.data.id === state.capture.id;
     if (!same) throw new PayPalError(`Replay produced a DIFFERENT capture id (${r.data.id} vs ${state.capture.id})`, { body: r.data });
@@ -336,15 +336,15 @@ async function run() {
       body: {
         sender_batch_header: {
           sender_batch_id: rid('payout'),
-          email_subject: 'ShowUp sandbox spike payout',
-          email_message: 'Sandbox test payout from the ShowUp spike.',
+          email_subject: 'Flakeproof sandbox spike payout',
+          email_message: 'Sandbox test payout from the Flakeproof spike.',
         },
         items: [
           {
             recipient_type: 'EMAIL',
             receiver: cfg.receiver,
             amount: { currency: cfg.currency, value: centsToValue(state.capture.cents) },
-            note: 'ShowUp spike: share of the no-show pot',
+            note: 'Flakeproof spike: share of the no-show pot',
             sender_item_id: `spike-${state.runId}-item-1`,
           },
         ],

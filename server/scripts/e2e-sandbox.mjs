@@ -12,7 +12,7 @@ const serverDir = resolve(import.meta.dirname, '..');
 const root = resolve(serverDir, '..');
 const PORT = 3198;
 const base = `http://127.0.0.1:${PORT}`;
-const db = `file:${join(mkdtempSync(join(tmpdir(), 'showup-e2e-')), 'e2e.db')}`;
+const db = `file:${join(mkdtempSync(join(tmpdir(), 'flakeproof-e2e-')), 'e2e.db')}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const checks = [];
 const check = (name, ok, extra = '') => { checks.push({ name, ok }); console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + extra : ''}`); };
@@ -39,7 +39,7 @@ try {
   for (let i = 0; i < 40; i++) { if (await fetch(`${base}/api/health`).then((r) => r.ok).catch(() => false)) break; await sleep(250); }
   if (!(await fetch(`${base}/api/health`).then((r) => r.ok).catch(() => false))) throw new Error(`Server did not start:\n${serverLog}`);
 
-  console.log('\nShowUp server end-to-end on the PayPal SANDBOX\n');
+  console.log('\nFlakeproof server end-to-end on the PayPal SANDBOX\n');
   const startsAt = new Date(Date.now() + 2 * 3600e3).toISOString();
   const created = await api('POST', '/api/events', { title: 'E2E court booking', startsAt, depositCents: 1000, guests: [{ name: 'Ana' }, { name: 'Ben' }, { name: 'Cy' }] });
   if (created.status !== 201) throw new Error(`create event failed: ${JSON.stringify(created.body)}`);

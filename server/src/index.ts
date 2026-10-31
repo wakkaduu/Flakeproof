@@ -24,5 +24,5 @@ const app = createApp({
 }, { webDir });
 
 app.listen(env.port, () => {
-  console.log(`ShowUp server on http://localhost:${env.port}  (PayPal SANDBOX)`);
+  console.log(`Flakeproof server on http://localhost:${env.port}  (PayPal SANDBOX)`);
 });
