@@ -47,3 +47,21 @@ USD. Everything below was observed against `api-m.sandbox.paypal.com`, not assum
   with no PayPal account), or `ONHOLD`.
 - Authorization expiry/reauthorization (sandbox cannot be tested by waiting).
 - Webhooks (not used; we poll).
+
+## Server end to end on the real sandbox (`npm run e2e:sandbox`)
+
+2026-10-31. Three friends deposit $10.00 each (approved as one US sandbox buyer), two show,
+one is a no-show and is captured, the net pot is paid to the two who came.
+
+| Check | Observed |
+|---|---|
+| Showed up: deposits | both `voided` |
+| No-show capture | `captured`, fee 84c, net 916c (3.49% + 49c on $10.00 = 84c) |
+| Pot | 916c = the no-show's net |
+| Payout items | 433c + 433c (916c - 2 x 25c reserved fee, split equally) |
+| Item status | both `SUCCESS` while the batch still read `PROCESSING` |
+| Payout fee | 50c actual = 50c reserved (25c per item, same as the earlier $5.00 observation) |
+| Event | `settled` |
+
+So the flat 25c payout fee per item now has two observations ($5.00 and $4.33 items). Still
+sandbox data; live fees are not verified and not claimed.

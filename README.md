@@ -55,7 +55,7 @@ Requires Node 22+.
 ```bash
 cp .env.example .env     # fill in PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET (sandbox)
 npm run setup            # install, generate Prisma client, create the SQLite database
-npm test                 # 54 tests, no keys needed
+npm test                 # 60 tests, no keys needed
 npm run dev              # API on http://localhost:3001
 ```
 
