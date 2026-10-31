@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
-import { FakeJudgeModel, FakeRsvpModel } from '../src/ai/fake.js';
+import { FakeJudgeModel, FakeRsvpModel, FakeScreenshotModel } from '../src/ai/fake.js';
 import { createApp } from '../src/app.js';
 import { DEFAULT_CONFIG, type AppConfig } from '../src/config.js';
 import { FakePayPal } from '../src/paypal/fake.js';
@@ -17,6 +17,7 @@ export interface Harness {
   paypal: FakePayPal;
   rsvp: FakeRsvpModel;
   judge: FakeJudgeModel;
+  screens: FakeScreenshotModel;
   db: PrismaClient;
   config: AppConfig;
   clock: { now: Date };
@@ -36,9 +37,10 @@ export async function makeHarness(configOverride: Partial<AppConfig> = {}, appOp
   const paypal = new FakePayPal();
   const rsvp = new FakeRsvpModel();
   const judge = new FakeJudgeModel();
+  const screens = new FakeScreenshotModel();
   const config = { ...DEFAULT_CONFIG, ...configOverride };
   const clock = { now: new Date('2026-11-01T12:00:00Z') };
-  const app = createApp({ db, paypal, rsvp, judge, config, mutex: new KeyedMutex(), now: () => clock.now }, appOpts);
+  const app = createApp({ db, paypal, rsvp, judge, screens, config, mutex: new KeyedMutex(), now: () => clock.now }, appOpts);
   const server: Server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
@@ -72,7 +74,7 @@ export async function makeHarness(configOverride: Partial<AppConfig> = {}, appOp
   };
 
   return {
-    base, paypal, rsvp, judge, db, config, clock, api, createEvent, deposit,
+    base, paypal, rsvp, judge, screens, db, config, clock, api, createEvent, deposit,
     close: async () => {
       await new Promise<void>((r) => server.close(() => r()));
       await db.$disconnect();

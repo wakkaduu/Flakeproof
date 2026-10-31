@@ -52,11 +52,11 @@ You need three things. Without them you can still run `npm test` (no keys needed
 ```bash
 cp .env.example .env     # fill in PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, GEMINI_API_KEY
 npm run setup            # install, generate the Prisma client, create the SQLite database
-npm test                 # 194 tests (139 server, 55 web), no keys needed
+npm test                 # 252 tests (182 server, 70 web), no keys needed
 npm run dev              # API on :3001, web app on http://localhost:5173
 ```
 
-Then open http://localhost:5173/new, paste a group chat, review what the AI found, and copy each
+Then open http://localhost:5173/new, add the group chat as a few **screenshots** (or paste text), check the transcript, review what the AI found, and copy each
 friend's link. Open a friend's link, press **Approve with PayPal**, and log in with a sandbox Personal
 account in a private window; PayPal returns you to the same page, which confirms the hold.
 
@@ -78,6 +78,7 @@ open, because guest links and PayPal's return URLs are built from it. Behind a p
 | Role | What it does | Model / service | State |
 |---|---|---|---|
 | RSVP agent | Reads pasted group-chat text and proposes the guest list, deposit and start time. Asks when unsure. | Google Gemini API (`GEMINI_MODEL`, currently `gemini-3.5-flash-lite`) | Built and run live |
+| Screenshot reader | Reads 1 to 8 phone screenshots of the chat into a transcript (who wrote what, when). The host checks and edits the transcript before anything is extracted from it. Overlapping screenshots are merged by plain code. | Google Gemini API (`GEMINI_VISION_MODEL`, currently `gemini-3.5-flash`, falling over to `gemini-3.5-flash-lite` when it is overloaded) | Built and run live ([notes](docs/screenshots.md)) |
 | Judge | After the event, reads the chat and recommends capture, forgive or unclear for each no-show, quoting their own words. The host decides and approves before any money moves. | same model | Built and run live ([design](docs/judge-design.md)) |
 
 The model only reads and recommends. It cannot move money. Amounts, splits and rounding are plain code in
@@ -93,6 +94,7 @@ checked against the pasted chat in code first (see [docs/api.md](docs/api.md)).
 | Money safety: never capture a deposit nobody could receive; payout preview; fee reserve | Built and tested with fakes. The fee model behind the preview is from a few sandbox observations |
 | Host dashboard: end the event, check-ins, AI suggestions, decisions, approve and settle, live holds and payout progress | Built; 18 component tests. **Driven in a real browser through the full story** (three came, one flaked, AI suggested, host charged, three paid) against the real server and real Gemini, with an in-memory PayPal. Not yet clicked through by a person on the real sandbox with four accounts |
 | Guest link page (mobile first) | Built; 35 web tests. **Driven in a real headless browser at phone width**: renders, no console errors, and "Approve with PayPal" reaches PayPal's sandbox. The approval-and-return leg was not completed by automation |
+| Screenshots in: add the chat from a phone, merged transcript, host edits it, amounts and days highlighted to check | Built; 43 server and 15 web tests. **Driven in a real headless browser at phone width against the real server and real Gemini** on a fabricated 52-message chat in 7 screenshots: 2 of 3 full runs gave an exact transcript and the correct final plan; the third hit the free-tier quota (the app shows "Try again" per screenshot). See [docs/screenshots.md](docs/screenshots.md) for what it gets wrong |
 | RSVP agent: paste chat, verified proposal, host review, invite links | Built. Real Gemini checked live, including prompt-injection and invented-guest cases |
 | AI Judge: verified recommendations, never pre-selected, with timing facts computed in code | Built. **Real Gemini evaluated on 15 adversarial cases, all passing on every run** ([results](docs/spike-results.md)): a real excuse gets forgive with a verified quote, a casual one gets charge, text addressed to the AI (even smuggled in as a fake `SYSTEM:` line) is flagged and left to the host |
 | Tests with a fake PayPal and a fake AI | Done |

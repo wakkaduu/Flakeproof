@@ -80,14 +80,33 @@ export interface CreatedEvent {
   event: { id: string; title: string; warnings: string[]; guests: { id: string; name: string; inviteUrl: string }[] };
 }
 
+/** One message read from a screenshot (server/src/ai/transcribe.ts: ShotMessage). */
+export interface ShotMessage {
+  author: string | null;
+  fromHost: boolean;
+  kind: 'text' | 'photo' | 'date';
+  text: string;
+  time: string | null;
+}
+/** A screenshot shrunk on the device: base64 JPEG, no "data:" prefix. */
+export interface ShotImage { mimeType: 'image/jpeg' | 'image/png' | 'image/webp'; data: string }
+/** The transcript made from all screenshots, one "[Day time] Name: text" line per message. */
+export interface Assembled { chat: string; messageCount: number; warnings: string[]; unknownCount: number }
+
 export interface HostApi {
   parseRsvp(chat: string, timeZone: string): Promise<RsvpProposal>;
   createEvent(body: CreateEventBody): Promise<CreatedEvent>;
+  /** AI: reads ONE screenshot. The image is not stored. */
+  readShot(image: ShotImage): Promise<{ messages: ShotMessage[] }>;
+  /** No AI: merges the messages read from the screenshots (oldest first) into one transcript. */
+  assembleShots(shots: ShotMessage[][], hostName: string): Promise<Assembled>;
 }
 
 export const hostApi: HostApi = {
   parseRsvp: (chat, timeZone) => request('POST', '/api/rsvp/parse', { chat, timeZone }),
   createEvent: (body) => request('POST', '/api/events', body),
+  readShot: (image) => request('POST', '/api/rsvp/screenshot', image),
+  assembleShots: (shots, hostName) => request('POST', '/api/rsvp/transcript', { shots, hostName }),
 };
 
 // ---- host dashboard ---------------------------------------------------------------------------

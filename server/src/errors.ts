@@ -49,6 +49,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(400).json({ error: { code: 'invalid_json', message: 'The request body is not valid JSON.' } });
     return;
   }
+  if (err && typeof err === 'object' && (err as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: { code: 'payload_too_large', message: 'That upload is too large.' } });
+    return;
+  }
   console.error('[server] unexpected error', err instanceof Error ? err.stack : err);
   res.status(500).json({ error: { code: 'internal', message: 'Something went wrong on our side.' } });
 };

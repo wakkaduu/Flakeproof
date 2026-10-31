@@ -1,3 +1,4 @@
+import { UNKNOWN_SENDER } from './transcribe.js';
 import type { RsvpDraft, RsvpInput } from './types.js';
 
 /**
@@ -177,6 +178,11 @@ export function verifyRsvp(draft: RsvpDraft, input: RsvpInput, opts: { maxGuests
   const seen = new Set<string>();
   for (const g of draft.guests) {
     const key = norm(g.name);
+    if (key === norm(UNKNOWN_SENDER)) {
+      notes.push('Left out “Unknown”: the transcript could not tell who wrote those messages.');
+      questions.push('Some messages have no readable sender (“Unknown”). If one of them is an RSVP, add that person by hand.');
+      continue;
+    }
     let canonical = authors.get(key);
     if (!canonical) {
       // "Ana" for chat author "Ana Lopez", only when unambiguous

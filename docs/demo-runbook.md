@@ -25,7 +25,7 @@ the approval screen, not typing passwords. Keep the host in a separate window.
 | Time | Beat | Shows |
 |---|---|---|
 | 0:00-0:15 | The problem: a booked court, a friend who flakes | One line of voiceover, app home |
-| 0:15-0:45 | Paste chat, AI reads it, host reviews | The "sister" question and the dropped invented guest, deposit verified from the organizer's message |
+| 0:15-0:45 | Add the chat as screenshots (decoy chat, see below), AI reads it, host checks the transcript, then reviews | The "sister" question and the dropped invented guest, deposit verified from the organizer's message |
 | 0:45-1:15 | Four friends approve a hold on PayPal | Hold messages; "nothing is charged" (cut between logins) |
 | 1:15-1:30 | "Event ended", mark who came | Host page |
 | 1:30-2:00 | The Judge reads the excuse | Recommendation with the quote; host clicks, nothing pre-selected |

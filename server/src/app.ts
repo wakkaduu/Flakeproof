@@ -10,6 +10,7 @@ import {
 } from './services/events.js';
 import { runJudge } from './services/judge.js';
 import { parseRsvp } from './services/rsvp.js';
+import { assembleChat, SCREENSHOT_BODY_LIMIT, transcribeScreenshot } from './services/screenshots.js';
 import { settle } from './services/settlement.js';
 import { RateLimiter } from './util.js';
 
@@ -22,7 +23,12 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
   // Behind a reverse proxy/host, req.ip is the proxy unless told how many hops to trust; without
   // this every visitor would share one rate-limit bucket.
   if (opts.trustProxy) app.set('trust proxy', opts.trustProxy);
-  app.use(express.json({ limit: '50kb' }));
+  // Everything is small JSON except one screenshot (base64) or the messages read from up to 8 of them.
+  const smallJson = express.json({ limit: '50kb' });
+  const imageJson = express.json({ limit: SCREENSHOT_BODY_LIMIT });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    (req.path === '/api/rsvp/screenshot' || req.path === '/api/rsvp/transcript' ? imageJson : smallJson)(req, res, next);
+  });
   app.use((_req: Request, res: Response, next: NextFunction) => {
     // Responses contain capability tokens and money state: never cache, never sniff.
     res.setHeader('Cache-Control', 'no-store');
@@ -37,6 +43,7 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
 
   const aiLimiter = new RateLimiter(ctx.config.rsvpPerMinute, 60_000);
   const eventsLimiter = new RateLimiter(ctx.config.eventsPerMinute, 60_000);
+  const screenshotLimiter = new RateLimiter(ctx.config.screenshotsPerMinute, 60_000);
   const api = Router();
   api.get('/health', (_req, res) => { res.json({ ok: true }); });
 
@@ -48,6 +55,17 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
     }
     res.json(await parseRsvp(ctx, req.body));
   });
+
+  // ---- AI: read ONE chat screenshot into messages. The image is never stored. Creates nothing.
+  api.post('/rsvp/screenshot', async (req, res) => {
+    if (!screenshotLimiter.allow(req.ip ?? 'unknown')) {
+      res.setHeader('Retry-After', '30');
+      throw new AppError(429, 'rate_limited', 'Too many screenshots. Wait a moment and try again.');
+    }
+    res.json(await transcribeScreenshot(ctx, req.body));
+  });
+  // No AI: merge the screenshots' messages (overlaps removed) into the transcript the host reviews.
+  api.post('/rsvp/transcript', (req, res) => { res.json(assembleChat(ctx, req.body)); });
 
   // ---- host creates an event (no accounts: the host link IS the credential) ----
   api.post('/events', async (req, res) => {

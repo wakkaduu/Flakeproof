@@ -19,6 +19,8 @@ export interface AppConfig {
   rsvpMaxChars: number;
   /** RSVP parses allowed per client per minute (the AI key has a small free quota). */
   rsvpPerMinute: number;
+  /** Screenshot reads allowed per client per minute (one call per image). */
+  screenshotsPerMinute: number;
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -33,8 +35,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   captureFeeBps: 349,
   captureFeeFixedCents: 49,
   eventsPerMinute: 20,
-  rsvpMaxChars: 8000,
+  // About 8 screenshots of a busy chat, with a day and time on every line.
+  rsvpMaxChars: 16_000,
   rsvpPerMinute: 10,
+  screenshotsPerMinute: 24,
 };
 
 const int = (def: number) => z.coerce.number().int().nonnegative().default(def);
@@ -51,6 +55,8 @@ const EnvSchema = z.object({
   // AI is optional: without a key the host adds guests by hand.
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().trim().min(1).default('gemini-3.5-flash-lite'),
+  // Reading screenshots is where a misread digit costs money, so it defaults to the larger model (measured: fewer misreads).
+  GEMINI_VISION_MODEL: z.string().trim().min(1).default('gemini-3.5-flash,gemini-3.5-flash-lite'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
   GRACE_HOURS: int(DEFAULT_CONFIG.graceHours),
   CAPTURE_FEE_BPS: int(DEFAULT_CONFIG.captureFeeBps),
@@ -74,6 +80,6 @@ export function loadEnv(env: NodeJS.ProcessEnv) {
     eventsPerMinute: e.EVENTS_PER_MINUTE,
   };
   const key = e.GEMINI_API_KEY?.trim();
-  const gemini = key ? { apiKey: key, model: e.GEMINI_MODEL, timeoutMs: e.AI_TIMEOUT_MS } : null;
+  const gemini = key ? { apiKey: key, model: e.GEMINI_MODEL, timeoutMs: e.AI_TIMEOUT_MS, visionModel: e.GEMINI_VISION_MODEL, visionTimeoutMs: Math.max(e.AI_TIMEOUT_MS, 60_000) } : null;
   return { config, trustProxy: e.TRUST_PROXY, port: e.PORT, databaseUrl: e.DATABASE_URL, clientId: e.PAYPAL_CLIENT_ID, clientSecret: e.PAYPAL_CLIENT_SECRET, gemini };
 }

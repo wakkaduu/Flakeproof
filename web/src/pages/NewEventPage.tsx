@@ -1,14 +1,20 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, hostApi, type CreatedEvent, type HostApi, type RsvpProposal } from '../api';
+import { ScreenshotInput } from '../components/ScreenshotInput';
 import { centsToDollars, parseDollars } from '../lib/money';
 import { formatMoney } from '../lib/format';
 import { rememberEvent } from '../lib/recentEvents';
+import { flagLines, highlight } from '../lib/transcript';
+import { useScreenshotReader } from '../lib/useScreenshotReader';
+import type { PreparedImage } from '../lib/images';
 
-const MAX_CHARS = 8000; // mirrors the server limit; the server enforces it
+const MAX_CHARS = 16_000; // mirrors the server limit; the server enforces it
 const MAX_GUESTS = 12; // mirrors the server limit
 const HONOR_DAYS = 3;
 
-type Step = 'paste' | 'reading' | 'review' | 'created';
+/** paste = choose how to give the chat; transcript = check what was read from screenshots; reading = the AI is working. */
+type Step = 'paste' | 'transcript' | 'reading' | 'review' | 'created';
+type Mode = 'shots' | 'text';
 interface GuestRow { key: number; name: string; checked: boolean; rsvp: 'in' | 'maybe' | 'out' | 'added'; source: 'author' | 'mentioned' | 'added'; evidence: string }
 
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -18,13 +24,25 @@ const localNowString = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-interface Props { api?: HostApi; copy?: (text: string) => Promise<void> }
+interface Props {
+  api?: HostApi;
+  copy?: (text: string) => Promise<void>;
+  /** Tests only: the real one needs a browser canvas. */
+  prepareImage?: (file: File) => Promise<PreparedImage>;
+}
 
-export function NewEventPage({ api = hostApi, copy = (t) => navigator.clipboard.writeText(t) }: Props) {
+export function NewEventPage({ api = hostApi, copy = (t) => navigator.clipboard.writeText(t), prepareImage }: Props) {
   const [step, setStep] = useState<Step>('paste');
+  // Screenshots are the phone-first way in; pasting text stays for people who already have it.
+  const [mode, setMode] = useState<Mode>('shots');
   const [chat, setChat] = useState('');
+  const [hostName, setHostName] = useState('');
+  const [transcriptWarnings, setTranscriptWarnings] = useState<string[]>([]);
+  /** Where "back" goes from the review step, and where an AI failure drops you. */
+  const [source, setSource] = useState<'paste' | 'transcript'>('paste');
   const [aiError, setAiError] = useState<string | null>(null);
   const [proposal, setProposal] = useState<RsvpProposal | null>(null);
+  const reader = useScreenshotReader(api, prepareImage);
 
   const [title, setTitle] = useState('');
   const [startsAt, setStartsAt] = useState('');
@@ -36,15 +54,31 @@ export function NewEventPage({ api = hostApi, copy = (t) => navigator.clipboard.
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedEvent | null>(null);
 
-  async function readChat() {
+  async function readChat(from: 'paste' | 'transcript') {
     setAiError(null);
+    setSource(from);
     setStep('reading');
     try {
       const p = await api.parseRsvp(chat, browserZone());
       applyProposal(p);
     } catch (e) {
       setAiError((e as ApiError).message);
-      setStep('paste');
+      setStep(from);
+    }
+  }
+
+  /** Reads the screenshots that are not read yet, then builds the transcript for the host to check. */
+  async function readScreenshots() {
+    setAiError(null);
+    if (!hostName.trim()) { setAiError('Type your name as your friends see it, so your own messages (on the right) can be labelled.'); return; }
+    if (!(await reader.readAll())) return; // a failed screenshot shows its own message and a Try again button
+    try {
+      const a = await reader.assemble(hostName.trim());
+      setChat(a.chat);
+      setTranscriptWarnings(a.warnings);
+      setStep('transcript');
+    } catch (e) {
+      setAiError((e as ApiError).message);
     }
   }
 
@@ -105,23 +139,75 @@ export function NewEventPage({ api = hostApi, copy = (t) => navigator.clipboard.
     <Page>
       <h1 className="text-3xl font-bold tracking-tight">New event</h1>
 
-      {(step === 'paste' || step === 'reading') && (
+      {(step === 'paste' || (step === 'reading' && source === 'paste')) && (
         <section aria-labelledby="paste-h" className="mt-5">
-          <h2 id="paste-h" className="text-lg font-semibold">Paste your group chat</h2>
+          <h2 id="paste-h" className="text-lg font-semibold">Add your group chat</h2>
           <p className="mt-1 text-ink-soft">Flakeproof reads who is in, the deposit and the time. You review everything before any link is made.</p>
-          <label htmlFor="chat" className="mt-4 block text-sm font-medium">Group chat</label>
+
+          <div role="group" aria-label="How to add the chat" className="mt-4 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+            {([['shots', 'Screenshots'], ['text', 'Paste text']] as const).map(([m, label]) => (
+              <button
+                key={m} type="button" aria-pressed={mode === m} onClick={() => { setMode(m); setAiError(null); }}
+                className={`min-h-11 rounded-lg px-3 text-base font-medium focus-visible:outline-2 focus-visible:outline-good-600 ${mode === m ? 'bg-white shadow-card' : 'text-ink-soft'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {mode === 'shots' && (
+            <ScreenshotInput reader={reader} hostName={hostName} onHostName={setHostName} onRead={readScreenshots} error={aiError} />
+          )}
+
+          {mode === 'text' && (
+            <>
+              <label htmlFor="chat" className="mt-4 block text-sm font-medium">Group chat</label>
+              <textarea
+                id="chat" value={chat} onChange={(e) => setChat(e.target.value)} rows={9} maxLength={MAX_CHARS}
+                placeholder={'Sam: court booked Saturday 6pm, $15 deposit each\nAna: I\'m in!\nBen: maybe'}
+                className="mt-1 w-full rounded-xl border border-line bg-white p-3 text-base shadow-card focus-visible:outline-2 focus-visible:outline-good-600"
+              />
+              <p className="mt-1 text-xs text-ink-soft">{chat.length}/{MAX_CHARS}. The text is sent to Google's Gemini API to be read. Use a demo chat, not a private one.</p>
+              {aiError && <Alert>{aiError}</Alert>}
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <button type="button" onClick={() => void readChat('paste')} disabled={step === 'reading' || !chat.trim()} className={primary}>
+                  {step === 'reading' ? 'Reading the chat…' : 'Read the chat'}
+                </button>
+              </div>
+            </>
+          )}
+          <div className="mt-3">
+            <button type="button" onClick={() => applyProposal(null)} disabled={step === 'reading' || reader.busy} className={secondary}>Skip, I'll add people myself</button>
+          </div>
+          <p role="status" className="sr-only">{step === 'reading' ? 'Reading the chat' : ''}</p>
+        </section>
+      )}
+
+      {(step === 'transcript' || (step === 'reading' && source === 'transcript')) && (
+        <section aria-labelledby="transcript-h" className="mt-5">
+          <h2 id="transcript-h" className="text-lg font-semibold">Check what was read</h2>
+          <p className="mt-1 text-ink-soft">
+            This is the text Flakeproof will use. Compare it with your screenshots and fix anything that is wrong, above all amounts, days, times and names.
+          </p>
+          {transcriptWarnings.length > 0 && (
+            <aside className="mt-3 rounded-xl border border-hold-100 bg-hold-50 p-4 text-hold-800" aria-labelledby="tw-h">
+              <h3 id="tw-h" className="font-semibold">Look at this first</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5">{transcriptWarnings.map((w) => <li key={w}>{w}</li>)}</ul>
+            </aside>
+          )}
+          <FlaggedLines chat={chat} />
+          <label htmlFor="transcript" className="mt-4 block text-sm font-medium">Transcript</label>
           <textarea
-            id="chat" value={chat} onChange={(e) => setChat(e.target.value)} rows={9} maxLength={MAX_CHARS}
-            placeholder={'Sam: court booked Saturday 6pm, $15 deposit each\nAna: I\'m in!\nBen: maybe'}
+            id="transcript" value={chat} onChange={(e) => setChat(e.target.value)} rows={12} maxLength={MAX_CHARS}
             className="mt-1 w-full rounded-xl border border-line bg-white p-3 text-base shadow-card focus-visible:outline-2 focus-visible:outline-good-600"
           />
-          <p className="mt-1 text-xs text-ink-soft">{chat.length}/{MAX_CHARS}. The text is sent to Google's Gemini API to be read. Use a demo chat, not a private one.</p>
+          <p className="mt-1 text-xs text-ink-soft">{chat.length}/{MAX_CHARS}. One line per message, written as "[Day time] Name: text".</p>
           {aiError && <Alert>{aiError}</Alert>}
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <button type="button" onClick={readChat} disabled={step === 'reading' || !chat.trim()} className={primary}>
+            <button type="button" onClick={() => void readChat('transcript')} disabled={step === 'reading' || !chat.trim()} className={primary}>
               {step === 'reading' ? 'Reading the chat…' : 'Read the chat'}
             </button>
-            <button type="button" onClick={() => applyProposal(null)} disabled={step === 'reading'} className={secondary}>Skip, I'll add people myself</button>
+            <button type="button" onClick={() => setStep('paste')} disabled={step === 'reading'} className={secondary}>Back to screenshots</button>
           </div>
           <p role="status" className="sr-only">{step === 'reading' ? 'Reading the chat' : ''}</p>
         </section>
@@ -182,12 +268,35 @@ export function NewEventPage({ api = hostApi, copy = (t) => navigator.clipboard.
 
             <div className="flex flex-col gap-3 sm:flex-row">
               <button type="submit" disabled={submitting} className={primary}>{submitting ? 'Creating…' : 'Create event and get links'}</button>
-              <button type="button" onClick={() => setStep('paste')} className={secondary}>Back to the chat</button>
+              <button type="button" onClick={() => setStep(source)} className={secondary}>Back to the chat</button>
             </div>
           </form>
         </section>
       )}
     </Page>
+  );
+}
+
+/** The lines that decide the money and the date, with the amount or time marked, to compare with the screenshots. */
+function FlaggedLines({ chat }: { chat: string }) {
+  const lines = useMemo(() => flagLines(chat), [chat]);
+  const shown = lines.slice(0, 12);
+  return (
+    <section aria-labelledby="flag-h" className="mt-3 rounded-xl border border-line bg-white p-4">
+      <h3 id="flag-h" className="font-semibold">Check these lines against your screenshots</h3>
+      {lines.length === 0 ? (
+        <p className="mt-1 text-sm text-ink-soft">No amounts, days or times were found, so the AI will ask you for them.</p>
+      ) : (
+        <>
+          <ul className="mt-2 space-y-1 text-sm">
+            {shown.map((l, i) => (
+              <li key={`${i}-${l}`}>{highlight(l).map((p, j) => (p.hit ? <mark key={j} className="rounded bg-hold-100 px-0.5 font-semibold text-hold-800">{p.text}</mark> : <span key={j}>{p.text}</span>))}</li>
+            ))}
+          </ul>
+          {lines.length > shown.length && <p className="mt-1 text-sm text-ink-soft">and {lines.length - shown.length} more in the text below.</p>}
+        </>
+      )}
+    </section>
   );
 }
 

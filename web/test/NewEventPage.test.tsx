@@ -34,12 +34,15 @@ function fakeApi(over: Partial<HostApi> = {}): HostApi {
   return {
     parseRsvp: vi.fn(async () => PROPOSAL),
     createEvent: vi.fn(async () => CREATED),
+    readShot: vi.fn(async () => ({ messages: [] })),
+    assembleShots: vi.fn(async () => ({ chat: '', messageCount: 0, warnings: [], unknownCount: 0 })),
     ...over,
   };
 }
 const emptyNameInput = () => screen.getAllByLabelText('Name').find((i) => (i as HTMLInputElement).value === '')!;
 async function readChat(api: HostApi, user = userEvent.setup()) {
   render(<NewEventPage api={api} copy={vi.fn(async () => {})} />);
+  await user.click(screen.getByRole('button', { name: 'Paste text' }));
   await user.type(screen.getByLabelText('Group chat'), 'Sam: $15 each\nAna: in');
   await user.click(screen.getByRole('button', { name: 'Read the chat' }));
   await screen.findByRole('heading', { name: 'Check the details' });
@@ -96,6 +99,7 @@ describe('NewEventPage: reading the chat', () => {
     const api = fakeApi({ parseRsvp: vi.fn(async () => { throw new ApiError(503, 'ai_unavailable', 'The AI helper is busy or unreachable right now. Try again in a moment, or add guests by hand.'); }) });
     const user = userEvent.setup();
     render(<NewEventPage api={api} />);
+    await user.click(screen.getByRole('button', { name: 'Paste text' }));
     await user.type(screen.getByLabelText('Group chat'), 'hello');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('by hand');
@@ -109,6 +113,7 @@ describe('NewEventPage: reading the chat', () => {
     const api = fakeApi({ parseRsvp: vi.fn(() => new Promise<RsvpProposal>((r) => { resolve = r; })) });
     const user = userEvent.setup();
     render(<NewEventPage api={api} />);
+    await user.click(screen.getByRole('button', { name: 'Paste text' }));
     expect(screen.getByRole('button', { name: 'Read the chat' })).toBeDisabled();
     await user.type(screen.getByLabelText('Group chat'), 'x');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
@@ -201,6 +206,7 @@ describe('NewEventPage: the links', () => {
     const copy = vi.fn(async () => {});
     const user = userEvent.setup();
     render(<NewEventPage api={fakeApi()} copy={copy} />);
+    await user.click(screen.getByRole('button', { name: 'Paste text' }));
     await user.type(screen.getByLabelText('Group chat'), 'x');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
     await screen.findByRole('heading', { name: 'Check the details' });
@@ -225,6 +231,7 @@ describe('remembering the host link on this device', () => {
     localStorage.clear();
     const user = userEvent.setup();
     render(<NewEventPage api={fakeApi()} copy={vi.fn(async () => {})} />);
+    await user.click(screen.getByRole('button', { name: 'Paste text' }));
     await user.type(screen.getByLabelText('Group chat'), 'x');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
     await screen.findByRole('heading', { name: 'Check the details' });

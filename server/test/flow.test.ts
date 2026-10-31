@@ -343,7 +343,7 @@ describe('serving the web app', () => {
     writeFileSync(join(dir, 'index.html'), '<!doctype html><title>app</title>');
     const { createApp } = await import('../src/app.js');
     const { KeyedMutex } = await import('../src/util.js');
-    const app = createApp({ db: h.db, paypal: h.paypal, rsvp: null, judge: null, config: h.config, mutex: new KeyedMutex(), now: () => new Date() }, { webDir: dir });
+    const app = createApp({ db: h.db, paypal: h.paypal, rsvp: null, judge: null, screens: null, config: h.config, mutex: new KeyedMutex(), now: () => new Date() }, { webDir: dir });
     const server = await new Promise<import('node:http').Server>((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
     const base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}`;
     try {

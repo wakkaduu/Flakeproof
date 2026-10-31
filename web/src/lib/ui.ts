@@ -1,0 +1,4 @@
+// Shared control styles for newer components (older pages keep their own copies of these strings).
+export const primary = 'flex min-h-12 items-center justify-center rounded-xl bg-ink px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-good-600 disabled:cursor-not-allowed disabled:opacity-60';
+export const secondary = 'flex min-h-11 items-center justify-center rounded-xl border border-line bg-white px-4 py-2 text-base font-medium transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-good-600 disabled:opacity-60';
+export const input = 'min-h-11 w-full rounded-xl border border-line bg-white px-3 py-2 text-base focus-visible:outline-2 focus-visible:outline-good-600';

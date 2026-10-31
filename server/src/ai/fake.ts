@@ -31,3 +31,19 @@ export class FakeJudgeModel implements JudgeModel {
     return next;
   }
 }
+
+/** Test stand-in for the screenshot reader. Records the size of each image, never its bytes. */
+import type { ScreenshotImage, ScreenshotModel, ShotDraft } from './transcribe.js';
+export class FakeScreenshotModel implements ScreenshotModel {
+  readonly inputs: { mimeType: string; bytes: number }[] = [];
+  private queue: (ShotDraft | AiError)[] = [];
+  willReturn(d: ShotDraft): this { this.queue.push(d); return this; }
+  willFail(e: AiError): this { this.queue.push(e); return this; }
+  async transcribe(image: ScreenshotImage): Promise<ShotDraft> {
+    this.inputs.push({ mimeType: image.mimeType, bytes: Buffer.from(image.data, 'base64').length });
+    const next = this.queue.shift();
+    if (!next) throw new AiError('unavailable', 'fake screenshot reader: nothing queued');
+    if (next instanceof AiError) throw next;
+    return next;
+  }
+}
