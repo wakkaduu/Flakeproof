@@ -24,3 +24,6 @@ prisma/*.db
 !.vscode/extensions.json
 .idea/
 *.log
+
+# Local Claude Code skills and settings (not part of the product; eval fixtures contain fake secrets)
+.claude/
