@@ -2,14 +2,22 @@
 
 > A deposit that costs you nothing if you show up.
 
-**Status (Oct 31, day 1 of building): the money flow and the RSVP agent work; the host dashboard and the
-AI Judge are not built yet.** This README only claims what has been run, and labels the rest.
+**Status (Oct 31): the whole story is built and has been run: chat to guest list, holds, check-in, AI
+Judge, host approval, payout.** What has and has not been run against the real PayPal sandbox is labelled below.
 
 <p>
   <img src="docs/screenshots/host-review.png" alt="Host reviews what the AI found in the group chat" width="220">
   <img src="docs/screenshots/host-links.png" alt="One link per friend plus a private host link" width="220">
   <img src="docs/screenshots/guest-invite.png" alt="A friend's page: approve a hold on PayPal, nothing is charged" width="220">
 </p>
+<p>
+  <img src="docs/screenshots/host-ai-suggestion.png" alt="Host dashboard: the AI suggests charging a no-show, quoting their own message; the host still chooses" width="220">
+  <img src="docs/screenshots/host-settled.png" alt="Host dashboard after settlement: three holds released, one deposit charged, three people paid" width="220">
+</p>
+
+*The first three screenshots are the real app on the real PayPal sandbox. The two host-dashboard screenshots are the real
+server, web app and Gemini model, but with an in-memory PayPal stand-in so four buyer logins were not needed; the money flow
+itself is checked on the real sandbox by `npm run e2e:sandbox`.*
 
 ## The idea
 
@@ -44,7 +52,7 @@ You need three things. Without them you can still run `npm test` (no keys needed
 ```bash
 cp .env.example .env     # fill in PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, GEMINI_API_KEY
 npm run setup            # install, generate the Prisma client, create the SQLite database
-npm test                 # 141 tests (106 server, 35 web), no keys needed
+npm test                 # 181 tests (128 server, 53 web), no keys needed
 npm run dev              # API on :3001, web app on http://localhost:5173
 ```
 
@@ -69,7 +77,7 @@ open, because guest links and PayPal's return URLs are built from it. Behind a p
 | Role | What it does | Model / service | State |
 |---|---|---|---|
 | RSVP agent | Reads pasted group-chat text and proposes the guest list, deposit and start time. Asks when unsure. | Google Gemini API (`GEMINI_MODEL`, currently `gemini-3.5-flash-lite`) | Built and run live |
-| Judge | After the event, recommends capture or forgive for each no-show, with a quoted reason. The host approves before any money moves. | same model | **Designed ([docs/judge-design.md](docs/judge-design.md)), not built** |
+| Judge | After the event, reads the chat and recommends capture, forgive or unclear for each no-show, quoting their own words. The host decides and approves before any money moves. | same model | Built and run live ([design](docs/judge-design.md)) |
 
 The model only reads and recommends. It cannot move money. Amounts, splits and rounding are plain code in
 integer cents. Because the real model sometimes invents guests, every name, amount and time it returns is
@@ -82,10 +90,10 @@ checked against the pasted chat in code first (see [docs/api.md](docs/api.md)).
 | PayPal: authorize, void, capture, payout to a second account | **Run on the real sandbox, all pass** ([results](docs/spike-results.md)) |
 | Server: events, guests, deposits, state machine, host-approved settlement ([API](docs/api.md)) | Built. **Real sandbox end to end passes** (`npm run e2e:sandbox`); 106 server tests against a fake PayPal |
 | Money safety: never capture a deposit nobody could receive; payout preview; fee reserve | Built and tested with fakes. The fee model behind the preview is from a few sandbox observations |
+| Host dashboard: end the event, check-ins, AI suggestions, decisions, approve and settle, live holds and payout progress | Built; 18 component tests. **Driven in a real browser through the full story** (three came, one flaked, AI suggested, host charged, three paid) against the real server and real Gemini, with an in-memory PayPal. Not yet clicked through by a person on the real sandbox with four accounts |
 | Guest link page (mobile first) | Built; 35 web tests. **Driven in a real headless browser at phone width**: renders, no console errors, and "Approve with PayPal" reaches PayPal's sandbox. The approval-and-return leg was not completed by automation |
 | RSVP agent: paste chat, verified proposal, host review, invite links | Built. Real Gemini checked live, including prompt-injection and invented-guest cases |
-| Host dashboard: end event, check-ins, decisions, approve and settle | **API built, no UI yet** |
-| AI Judge | **Not built** |
+| AI Judge: verified recommendations, never pre-selected | Built. Real Gemini checked live (3 of 3 runs): a real excuse gets forgive with a verified quote, a casual one gets charge, a message that talks to the AI is flagged and left to the host |
 | Tests with a fake PayPal and a fake AI | Done |
 
 Paths that exist in code but were **never run against the real PayPal sandbox** (only fakes or a local stub):

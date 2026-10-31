@@ -1,5 +1,6 @@
 import { GuestPage, type PayPalReturn } from './pages/GuestPage';
 import { loadRecent } from './lib/recentEvents';
+import { HostPage } from './pages/HostPage';
 import { NewEventPage } from './pages/NewEventPage';
 
 function parseReturn(search: string): PayPalReturn {
@@ -12,7 +13,8 @@ export function App({ path = window.location.pathname, search = window.location.
   const guest = /^\/g\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
   if (guest?.[1]) return <GuestPage token={guest[1]} paypalReturn={parseReturn(search)} />;
   if (/^\/new\/?$/.test(path)) return <NewEventPage />;
-  if (/^\/host\/[A-Za-z0-9_-]{16,64}\/?$/.test(path)) return <HostSoon />;
+  const host = /^\/host\/([A-Za-z0-9_-]{16,64})\/?$/.exec(path);
+  if (host?.[1]) return <HostPage token={host[1]} />;
   return <Home />;
 }
 
@@ -24,16 +26,6 @@ function Home() {
       <p className="mt-3 text-ink-soft">Open the invite link your host sent you to confirm your spot.</p>
       <a href="/new" className="mt-6 flex min-h-12 items-center justify-center rounded-xl bg-ink px-5 py-3 text-base font-semibold text-white">Host an event</a>
       <RecentEvents />
-    </main>
-  );
-}
-
-function HostSoon() {
-  return (
-    <main className="mx-auto min-h-dvh max-w-md px-4 py-10">
-      <p className="text-sm font-bold tracking-tight text-good-700">Flakeproof</p>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight">Host page</h1>
-      <p className="mt-2 text-ink-soft">Marking who showed up and approving the money comes in the next step. Keep this link; it is your host key.</p>
     </main>
   );
 }

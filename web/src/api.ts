@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+async function request<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -88,4 +88,70 @@ export interface HostApi {
 export const hostApi: HostApi = {
   parseRsvp: (chat, timeZone) => request('POST', '/api/rsvp/parse', { chat, timeZone }),
   createEvent: (body) => request('POST', '/api/events', body),
+};
+
+// ---- host dashboard ---------------------------------------------------------------------------
+// Mirrors GET /api/host/:token/event (server/src/services/events.ts: hostView). Money is integer cents.
+
+export type Attendance = 'unknown' | 'showed' | 'no_show';
+export type Decision = 'capture' | 'forgive';
+
+export interface HostGuest {
+  id: string;
+  name: string;
+  inviteUrl: string;
+  attendance: Attendance;
+  /** The host's own choice. Always null until the host picks; the AI never fills it in. */
+  decision: Decision | null;
+  /** The AI's verified suggestion (audit only), or null. */
+  ai: { recommendation: 'capture' | 'forgive' | 'unclear'; reason: string; evidence: string | null; flag: 'addresses_the_ai' | null } | null;
+  stage: GuestStage;
+  deposit: { status: 'pending' | 'authorized' | 'capture_pending' | 'captured' | 'voided'; amountCents: number; feeCents: number | null; netCents: number | null; payerEmail: string | null } | null;
+  payout: { amountCents: number; status: string; feeCents: number | null } | null;
+}
+
+export interface PayoutPreview {
+  provisional: boolean;
+  capturingCount: number;
+  recipientCount: number;
+  estimatedPotCents: number;
+  estimatedPerPersonCents: number | null;
+  problem: 'no_recipients' | 'pot_too_small' | null;
+  unpayableNames: string[];
+}
+
+export interface HostView {
+  id: string;
+  title: string;
+  startsAt: string;
+  depositCents: number;
+  currency: string;
+  status: 'open' | 'ended' | 'settled';
+  settlementApproved: boolean;
+  canSettle: boolean;
+  blockers: string[];
+  warnings: string[];
+  problems: string[];
+  guests: HostGuest[];
+  payoutPreview: PayoutPreview | null;
+  payout: { status: string; skippedReason: string | null; potCents: number; feeReserveCents: number; distributableCents: number; actualFeesCents: number | null } | null;
+}
+
+export interface HostDashboardApi {
+  getEvent(token: string): Promise<HostView>;
+  end(token: string): Promise<HostView>;
+  setAttendance(token: string, guestId: string, attendance: 'showed' | 'no_show'): Promise<HostView>;
+  setDecision(token: string, guestId: string, decision: Decision): Promise<HostView>;
+  judge(token: string, chat: string, timeZone: string): Promise<HostView>;
+  /** The explicit approval. Safe to call again to resume or refresh payout status. */
+  settle(token: string): Promise<HostView>;
+}
+
+export const hostDashboardApi: HostDashboardApi = {
+  getEvent: (t) => request('GET', `/api/host/${enc(t)}/event`),
+  end: (t) => request('POST', `/api/host/${enc(t)}/end`, {}),
+  setAttendance: (t, g, attendance) => request('PUT', `/api/host/${enc(t)}/guests/${enc(g)}/attendance`, { attendance }),
+  setDecision: (t, g, decision) => request('PUT', `/api/host/${enc(t)}/guests/${enc(g)}/decision`, { decision }),
+  judge: (t, chat, timeZone) => request('POST', `/api/host/${enc(t)}/judge`, { chat, timeZone }),
+  settle: (t) => request('POST', `/api/host/${enc(t)}/settle`, { approve: true }),
 };

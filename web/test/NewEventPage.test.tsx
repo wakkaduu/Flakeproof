@@ -252,8 +252,10 @@ describe('routing', () => {
   it('/new shows the form; /host/:token shows the host placeholder; home links to /new', async () => {
     render(<App path="/new" search="" />);
     expect(screen.getByRole('heading', { name: 'New event' })).toBeInTheDocument();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'not_found', message: 'Event not found' } }), { status: 404 })));
     render(<App path={`/host/${'h'.repeat(32)}`} search="" />);
-    expect(screen.getByRole('heading', { name: 'Host page' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: "This host link isn't valid" })).toBeInTheDocument();
+    vi.unstubAllGlobals();
     render(<App path="/" search="" />);
     await waitFor(() => expect(screen.getByRole('link', { name: 'Host an event' })).toHaveAttribute('href', '/new'));
   });

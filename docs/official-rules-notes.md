@@ -19,8 +19,8 @@ Internal target: submit by **Nov 11**. The project must stay available and free 
 
 | Criterion | What it asks | Where we stand |
 |---|---|---|
-| Technological Implementation | Thorough, skilled use of PayPal **and** AI; a working, non-trivial implementation | Strong on PayPal (authorize, void, capture, payouts; proven on the sandbox). AI is half-done: the RSVP agent works; the Judge is not built |
-| Design | "A complete, coherent product experience, not just a technical proof of concept" | **Not complete: there is no host dashboard yet.** This is a fifth of the score, so UI polish is not optional |
+| Technological Implementation | Thorough, skilled use of PayPal **and** AI; a working, non-trivial implementation | Strong on PayPal (authorize, void, capture, payouts; proven on the sandbox). Both AI roles work: the RSVP agent and the Judge (which drives a real capture and payout once the host approves) |
+| Design | "A complete, coherent product experience, not just a technical proof of concept" | Complete flow now exists (host creates, friends hold, host checks in, AI suggests, host approves, people are paid). A fifth of the score, so polish still matters |
 | Potential Impact | A credible, **specific** case for a real problem and a real audience | Needs a sharp pitch: who loses money to no-shows (court and table bookings, tickets, split rentals) |
 | Innovation / Idea | Novel, different from existing ideas | Holds-not-charges plus the pot going to the people who came; AI that reads the chat |
 | Presentation | The video shows it working **end to end**; clear problem, audience, why it matters | The 3-minute video is the main evidence. It must include the Judge and the payout |
