@@ -23,7 +23,7 @@ const app = createApp({
   config: env.config,
   mutex: new KeyedMutex(),
   now: () => new Date(),
-}, { webDir });
+}, { webDir, trustProxy: env.trustProxy });
 
 app.listen(env.port, () => {
   console.log(`Flakeproof server on http://localhost:${env.port}  (PayPal SANDBOX, AI ${env.gemini ? env.gemini.model : 'off: add GEMINI_API_KEY'})`);

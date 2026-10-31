@@ -314,17 +314,23 @@ describe('host chooses the start time and amount freely', () => {
     expect(r.body.guests[0].payout.amountCents).toBe(482_501 - 25);
   });
 
-  it('a tiny deposit does not crash: the pot is too small to pay out and the event still settles', async () => {
+  it('a tiny deposit cannot be captured into a pot nobody can receive; forgiving settles cleanly', async () => {
     const ev = await h.createEvent({ names: ['Ana', 'Ben'], depositCents: 100 });
     for (const g of ev.guests) await h.deposit(g.invite);
     await h.api('POST', `/api/host/${ev.hostToken}/end`);
     await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[0]!.id}/attendance`, { attendance: 'showed' });
     await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/attendance`, { attendance: 'no_show' });
-    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/decision`, { decision: 'capture' });
+    const dec = await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/decision`, { decision: 'capture' });
+    expect(dec.body.canSettle).toBe(false);
+    expect(dec.body.blockers.join(' ')).toContain('under $1.00');
+    const blocked = await h.api('POST', `/api/host/${ev.hostToken}/settle`, { approve: true });
+    expect(blocked.status).toBe(409);
+    expect(h.paypal.callsTo('captureAuthorization')).toBe(0);
+    await h.api('PUT', `/api/host/${ev.hostToken}/guests/${ev.guests[1]!.id}/decision`, { decision: 'forgive' });
     const r = await h.api('POST', `/api/host/${ev.hostToken}/settle`, { approve: true });
     expect(r.status).toBe(200);
-    expect(r.body.payout).toMatchObject({ status: 'SKIPPED', skippedReason: 'pot_too_small' });
     expect(r.body.status).toBe('settled');
+    expect(r.body.payout).toMatchObject({ status: 'SKIPPED', skippedReason: 'no_capture' });
   });
 });
 

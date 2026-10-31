@@ -25,7 +25,7 @@ export async function settle(ctx: Ctx, hostToken: string): Promise<EventFull> {
     if (ev.status === 'settled') return ev;
 
     if (!ev.settlementStartedAt) {
-      const blockers = settlementBlockers(ev);
+      const blockers = settlementBlockers(ev, ctx.config);
       if (ev.status !== 'ended' || blockers.length) {
         throw conflict('not_ready', blockers.join(' ') || 'End the event first.');
       }

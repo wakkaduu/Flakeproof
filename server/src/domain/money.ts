@@ -78,3 +78,15 @@ export function planPayout(input: PayoutPlanInput): PayoutPlan {
 function assertCents(v: number, name: string): void {
   if (!Number.isSafeInteger(v) || v < 0) throw new RangeError(`${name} must be a non-negative integer, got ${v}`);
 }
+
+/**
+ * ESTIMATE of what the merchant keeps from one captured deposit, used only to warn the host
+ * before money moves. PayPal's real figure (seller_receivable_breakdown) is what the payout
+ * uses. The fee model (3.49% + 49c) was observed on the sandbox at $5, $10; it is rounded UP so
+ * the estimate errs low.
+ */
+export function estimateCaptureNet(depositCents: number, fee: { bps: number; fixedCents: number }): number {
+  if (!Number.isSafeInteger(depositCents) || depositCents < 0) throw new RangeError(`Invalid cents: ${depositCents}`);
+  const feeCents = Math.ceil((depositCents * fee.bps) / 10_000) + fee.fixedCents;
+  return Math.max(0, depositCents - feeCents);
+}

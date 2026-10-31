@@ -15,19 +15,27 @@ import { RateLimiter } from './util.js';
 const Token = z.string().min(16).max(64).regex(/^[A-Za-z0-9_-]+$/);
 const Id = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/);
 
-export function createApp(ctx: Ctx, opts: { webDir?: string } = {}) {
+export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number } = {}) {
   const app = express();
   app.disable('x-powered-by');
+  // Behind a reverse proxy/host, req.ip is the proxy unless told how many hops to trust; without
+  // this every visitor would share one rate-limit bucket.
+  if (opts.trustProxy) app.set('trust proxy', opts.trustProxy);
   app.use(express.json({ limit: '50kb' }));
   app.use((_req: Request, res: Response, next: NextFunction) => {
     // Responses contain capability tokens and money state: never cache, never sniff.
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    // The app is same-origin only: scripts, styles, API calls. PayPal is reached by a top-level
+    // redirect, which CSP does not restrict.
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
     next();
   });
 
   const rsvpLimiter = new RateLimiter(ctx.config.rsvpPerMinute, 60_000);
+  const eventsLimiter = new RateLimiter(ctx.config.eventsPerMinute, 60_000);
   const api = Router();
   api.get('/health', (_req, res) => { res.json({ ok: true }); });
 
@@ -42,6 +50,10 @@ export function createApp(ctx: Ctx, opts: { webDir?: string } = {}) {
 
   // ---- host creates an event (no accounts: the host link IS the credential) ----
   api.post('/events', async (req, res) => {
+    if (!eventsLimiter.allow(req.ip ?? 'unknown')) {
+      res.setHeader('Retry-After', '30');
+      throw new AppError(429, 'rate_limited', 'Too many events created. Wait a moment and try again.');
+    }
     const input = CreateEventInput.parse(req.body);
     const { hostToken, event } = await createEvent(ctx, input);
     res.status(201).json({

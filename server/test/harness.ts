@@ -19,7 +19,7 @@ export interface Harness {
   db: PrismaClient;
   config: AppConfig;
   clock: { now: Date };
-  api: (method: string, path: string, body?: unknown) => Promise<{ status: number; body: any }>;
+  api: (method: string, path: string, body?: unknown, headers?: Record<string, string>) => Promise<{ status: number; body: any }>;
   close: () => Promise<void>;
   /** Creates an event; returns host token and guests with invite tokens. */
   createEvent: (opts?: { names?: string[]; depositCents?: number; hoursAhead?: number }) => Promise<{ hostToken: string; eventId: string; guests: { id: string; name: string; invite: string }[] }>;
@@ -27,7 +27,7 @@ export interface Harness {
   deposit: (invite: string, email?: string) => Promise<void>;
 }
 
-export async function makeHarness(configOverride: Partial<AppConfig> = {}): Promise<Harness> {
+export async function makeHarness(configOverride: Partial<AppConfig> = {}, appOpts: { trustProxy?: number } = {}): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'flakeproof-db-'));
   const file = join(dir, 'test.db');
   copyFileSync(TEMPLATE_DB, file);
@@ -36,13 +36,13 @@ export async function makeHarness(configOverride: Partial<AppConfig> = {}): Prom
   const rsvp = new FakeRsvpModel();
   const config = { ...DEFAULT_CONFIG, ...configOverride };
   const clock = { now: new Date('2026-11-01T12:00:00Z') };
-  const app = createApp({ db, paypal, rsvp, config, mutex: new KeyedMutex(), now: () => clock.now });
+  const app = createApp({ db, paypal, rsvp, config, mutex: new KeyedMutex(), now: () => clock.now }, appOpts);
   const server: Server = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-  const api: Harness['api'] = async (method, path, body) => {
+  const api: Harness['api'] = async (method, path, body, headers = {}) => {
     const res = await fetch(`${base}${path}`, {
-      method, headers: { 'content-type': 'application/json' },
+      method, headers: { 'content-type': 'application/json', ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await res.text();

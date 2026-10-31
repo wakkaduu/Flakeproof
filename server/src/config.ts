@@ -8,6 +8,11 @@ export interface AppConfig {
   maxGuests: number;
   /** PayPal's recommended capture window after authorization. */
   honorPeriodDays: number;
+  /** Observed sandbox capture fee, used only for the pre-settlement estimate. */
+  captureFeeBps: number;
+  captureFeeFixedCents: number;
+  /** Events a client may create per minute. */
+  eventsPerMinute: number;
   /** Longest chat we will send to the AI. */
   rsvpMaxChars: number;
   /** RSVP parses allowed per client per minute (the AI key has a small free quota). */
@@ -22,6 +27,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   minPayoutPerPersonCents: 100,
   maxGuests: 12,
   honorPeriodDays: 3,
+  captureFeeBps: 349,
+  captureFeeFixedCents: 49,
+  eventsPerMinute: 20,
   rsvpMaxChars: 8000,
   rsvpPerMinute: 10,
 };
@@ -41,6 +49,11 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().trim().min(1).default('gemini-3.5-flash-lite'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
+  CAPTURE_FEE_BPS: int(DEFAULT_CONFIG.captureFeeBps),
+  CAPTURE_FEE_FIXED_CENTS: int(DEFAULT_CONFIG.captureFeeFixedCents),
+  EVENTS_PER_MINUTE: int(DEFAULT_CONFIG.eventsPerMinute),
+  // Number of reverse-proxy hops to trust for the client IP (0 = none). Needed behind any host/proxy.
+  TRUST_PROXY: int(0),
 });
 
 export function loadEnv(env: NodeJS.ProcessEnv) {
@@ -51,8 +64,11 @@ export function loadEnv(env: NodeJS.ProcessEnv) {
     payoutFeePerItemCents: e.PAYOUT_FEE_PER_ITEM_CENTS,
     minPayoutPerPersonCents: e.MIN_PAYOUT_PER_PERSON_CENTS,
     maxGuests: e.MAX_GUESTS,
+    captureFeeBps: e.CAPTURE_FEE_BPS,
+    captureFeeFixedCents: e.CAPTURE_FEE_FIXED_CENTS,
+    eventsPerMinute: e.EVENTS_PER_MINUTE,
   };
   const key = e.GEMINI_API_KEY?.trim();
   const gemini = key ? { apiKey: key, model: e.GEMINI_MODEL, timeoutMs: e.AI_TIMEOUT_MS } : null;
-  return { config, port: e.PORT, databaseUrl: e.DATABASE_URL, clientId: e.PAYPAL_CLIENT_ID, clientSecret: e.PAYPAL_CLIENT_SECRET, gemini };
+  return { config, trustProxy: e.TRUST_PROXY, port: e.PORT, databaseUrl: e.DATABASE_URL, clientId: e.PAYPAL_CLIENT_ID, clientSecret: e.PAYPAL_CLIENT_SECRET, gemini };
 }

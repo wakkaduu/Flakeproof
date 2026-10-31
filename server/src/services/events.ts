@@ -5,6 +5,9 @@ import {
 } from '../domain/stateMachine.js';
 import { AppError, conflict, notFound } from '../errors.js';
 import { hashToken, maskEmail, newToken } from '../util.js';
+import { formatCents } from '../domain/money.js';
+import type { AppConfig } from '../config.js';
+import { payoutPreview } from './preview.js';
 import {
   attendanceOf, BAD_PAYOUT_STATUSES, decisionOf, depositStatusOf, eventInclude,
   type EventFull,
@@ -101,7 +104,7 @@ export async function setDecision(ctx: Ctx, hostToken: string, guestId: string, 
 // ---- views ------------------------------------------------------------------
 
 /** What still stops the host from approving settlement. Empty means ready. */
-export function settlementBlockers(ev: EventFull): string[] {
+export function settlementBlockers(ev: EventFull, cfg: AppConfig): string[] {
   const out: string[] = [];
   if (ev.status === 'open') out.push('End the event first.');
   const held = ev.guests.filter((g) => g.deposit && depositStatusOf(g.deposit) === 'authorized');
@@ -109,6 +112,18 @@ export function settlementBlockers(ev: EventFull): string[] {
   if (unmarked.length) out.push(`Mark attendance for: ${unmarked.map((g) => g.name).join(', ')}.`);
   const undecided = held.filter((g) => attendanceOf(g) === 'no_show' && !g.decision);
   if (undecided.length) out.push(`Decide capture or forgive for: ${undecided.map((g) => g.name).join(', ')}.`);
+
+  // Never capture money that nobody could receive: there is no refund path, so the cash would
+  // sit in the merchant account. Only judged once attendance is complete.
+  if (!out.length) {
+    const prev = payoutPreview(ev, cfg);
+    const names = ev.guests.filter((g) => attendanceOf(g) === 'no_show' && decisionOf(g) === 'capture').map((g) => g.name).join(', ');
+    if (prev.problem === 'no_recipients') {
+      out.push(`Capturing ${names} would leave nobody to give the money to (no one who came has a deposit and a PayPal email on file). Forgive instead, or fix who showed up.`);
+    } else if (prev.problem === 'pot_too_small') {
+      out.push(`After PayPal's fees, capturing ${names} would leave under ${cfg.minPayoutPerPersonCents / 100 >= 1 ? '$' + formatCents(cfg.minPayoutPerPersonCents) : 'the minimum'} for each person who came, so nothing could be paid out. Forgive instead.`);
+    }
+  }
   return out;
 }
 
@@ -139,7 +154,14 @@ export function hostView(ctx: Ctx, ev: EventFull) {
       payout: item && { amountCents: item.amountCents, status: item.status, feeCents: item.feeCents },
     };
   });
-  const blockers = ev.settlementStartedAt ? [] : settlementBlockers(ev);
+  const blockers = ev.settlementStartedAt ? [] : settlementBlockers(ev, ctx.config);
+  const preview = ev.payout ? null : payoutPreview(ev, ctx.config);
+  if (preview?.unpayableNames.length) {
+    problems.push(`${preview.unpayableNames.join(', ')}: PayPal gave no email address for the payment, so they cannot be paid their share.`);
+  }
+  if (ev.payout?.batchStatus === 'SKIPPED' && ev.payout.potCents > 0) {
+    problems.push(`${formatCents(ev.payout.potCents)} was captured but could not be paid out (${ev.payout.skippedReason}). It is in your PayPal account; pay it out or refund it by hand.`);
+  }
   // Not limits, just honesty: the host may pick any start time, but PayPal only guarantees a
   // hold for its honor period. Reauthorization is not built.
   const warnings: string[] = [];
@@ -160,6 +182,8 @@ export function hostView(ctx: Ctx, ev: EventFull) {
     warnings,
     problems,
     guests,
+    /** Estimate of the payout if settled now; null once a payout plan exists. */
+    payoutPreview: preview,
     payout: ev.payout && {
       status: ev.payout.batchStatus,
       skippedReason: ev.payout.skippedReason,
