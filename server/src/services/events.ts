@@ -147,7 +147,7 @@ export function hostView(ctx: Ctx, ev: EventFull) {
       attendance: attendanceOf(g),
       decision: decisionOf(g),
       /** The AI's verified recommendation, or null. Never pre-selects the decision. */
-      ai: g.aiRecommendation ? { recommendation: g.aiRecommendation as 'capture' | 'forgive' | 'unclear', reason: g.aiReason ?? '', evidence: g.aiEvidence, flag: g.aiFlag as 'addresses_the_ai' | null } : null,
+      ai: g.aiRecommendation ? { recommendation: g.aiRecommendation as 'capture' | 'forgive' | 'unclear', reason: g.aiReason ?? '', evidence: g.aiEvidence, flag: g.aiFlag as 'addresses_the_ai' | null, minutesBeforeStart: g.aiMinutesBeforeStart } : null,
       stage: deriveGuestStage({ attendance: attendanceOf(g), depositStatus: dep ? depositStatusOf(dep) : null, payoutItemStatus: item?.status ?? null }),
       deposit: dep && {
         status: depositStatusOf(dep), amountCents: dep.amountCents, feeCents: dep.feeCents, netCents: dep.netCents,
@@ -178,6 +178,8 @@ export function hostView(ctx: Ctx, ev: EventFull) {
     depositCents: ev.depositCents,
     currency: ev.currency,
     status: ev.status as EventStatus,
+    /** Excuses sent at least this long before the start count as timely (a fact shown to the host, not a rule that decides). */
+    graceMinutes: ctx.config.graceHours * 60,
     settlementApproved: ev.settlementStartedAt !== null,
     canSettle: ev.status === 'ended' && blockers.length === 0,
     blockers,

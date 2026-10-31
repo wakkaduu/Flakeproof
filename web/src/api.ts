@@ -104,7 +104,7 @@ export interface HostGuest {
   /** The host's own choice. Always null until the host picks; the AI never fills it in. */
   decision: Decision | null;
   /** The AI's verified suggestion (audit only), or null. */
-  ai: { recommendation: 'capture' | 'forgive' | 'unclear'; reason: string; evidence: string | null; flag: 'addresses_the_ai' | null } | null;
+  ai: { recommendation: 'capture' | 'forgive' | 'unclear'; reason: string; evidence: string | null; flag: 'addresses_the_ai' | null; minutesBeforeStart: number | null } | null;
   stage: GuestStage;
   deposit: { status: 'pending' | 'authorized' | 'capture_pending' | 'captured' | 'voided'; amountCents: number; feeCents: number | null; netCents: number | null; payerEmail: string | null } | null;
   payout: { amountCents: number; status: string; feeCents: number | null } | null;
@@ -127,6 +127,8 @@ export interface HostView {
   depositCents: number;
   currency: string;
   status: 'open' | 'ended' | 'settled';
+  /** Excuses sent at least this long before the start count as timely: a fact shown to the host, not a rule that decides. */
+  graceMinutes: number;
   settlementApproved: boolean;
   canSettle: boolean;
   blockers: string[];

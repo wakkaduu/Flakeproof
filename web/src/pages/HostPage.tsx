@@ -21,6 +21,9 @@ export function HostPage({ token, api = hostDashboardApi, copy = (t) => navigato
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef<string | null>(null);
+  // Bumped whenever an action starts or finishes. A background poll that began before that must not
+  // overwrite the newer result the action just produced (a stale page replacing "settling").
+  const seq = useRef(0);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [approved, setApproved] = useState(false);
   const [chat, setChat] = useState('');
@@ -30,6 +33,7 @@ export function HostPage({ token, api = hostDashboardApi, copy = (t) => navigato
   const act = useCallback(async (key: string, fn: () => Promise<HostView>): Promise<boolean> => {
     if (busyRef.current) return false;
     busyRef.current = key;
+    seq.current += 1;
     setBusy(key);
     setError(null);
     try {
@@ -39,6 +43,7 @@ export function HostPage({ token, api = hostDashboardApi, copy = (t) => navigato
       setError((e as ApiError).message);
       return false;
     } finally {
+      seq.current += 1;
       busyRef.current = null;
       setBusy(null);
     }
@@ -60,9 +65,11 @@ export function HostPage({ token, api = hostDashboardApi, copy = (t) => navigato
     if (settling && settlePolls >= MAX_SETTLE_POLLS) return;
     const id = setInterval(async () => {
       if (busyRef.current || document.hidden) return;
+      const startedAt = seq.current;
       try {
-        if (settling) { setSettlePolls((n) => n + 1); setView(await api.settle(token)); }
-        else setView(await api.getEvent(token));
+        if (settling) setSettlePolls((n) => n + 1);
+        const next = settling ? await api.settle(token) : await api.getEvent(token);
+        if (seq.current === startedAt && !busyRef.current) setView(next); // else an action got there first
       } catch (e) {
         if (settling) setError((e as ApiError).message);
       }
@@ -260,6 +267,7 @@ function GuestCard({ g, view, locked, busy, copied, money, onCopy, onAttendance,
           </p>
           <p className="mt-1">{g.ai.reason}</p>
           {g.ai.evidence && <p className="mt-1 text-ink-soft">They wrote: <q>{g.ai.evidence}</q></p>}
+          {g.ai.minutesBeforeStart !== null && <p className="mt-1 text-ink-soft">{timingLine(g.ai.minutesBeforeStart, view.graceMinutes)}</p>}
           {g.ai.flag === 'addresses_the_ai' && <p className="mt-1 font-medium text-hold-800">This message is addressed to the AI. Treat it with care.</p>}
         </div>
       )}
@@ -284,6 +292,16 @@ function GuestCard({ g, view, locked, busy, copied, money, onCopy, onAttendance,
       )}
     </li>
   );
+}
+
+/** "Wrote this 3 h 10 min before the start (within your 2 h rule)". A fact from the chat's timestamps, not the AI's opinion. */
+export function timingLine(minutes: number, graceMinutes: number): string {
+  const span = (m: number) => { const a = Math.abs(m); const h = Math.floor(a / 60); const r = a % 60; return h ? (r ? `${h} h ${r} min` : `${h} h`) : `${r} min`; };
+  if (minutes < 0) return `Wrote this ${span(minutes)} after the start.`;
+  const rule = `${span(graceMinutes)}`;
+  return minutes >= graceMinutes
+    ? `Wrote this ${span(minutes)} before the start: within your ${rule} rule.`
+    : `Wrote this ${span(minutes)} before the start: later than your ${rule} rule.`;
 }
 
 function PreviewCard({ view, money }: { view: HostView; money: (c: number) => string }) {

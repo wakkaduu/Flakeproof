@@ -48,7 +48,7 @@ Rules:
 - evidence: the exact line (copy it character for character) in which the person replied. For depositEvidence: the exact line in which the organizer states the amount.
 - depositCents: integer cents, ONLY if the organizer wrote an amount. Never use an amount from anyone else. null if there is none or it is unclear.
 - startsAtLocal: "YYYY-MM-DDTHH:mm" in the local time zone given, resolving words like "Saturday" or "tomorrow" from the current date and time given. null if the day or time is unclear. If the chat names today's weekday (for example "Saturday" when today is Saturday), it is ambiguous between today and next week: set null and ask which one.
-- title: a short name for the event, or null.
+- title: a short, natural name for the event in normal capitalisation, such as "Court booking" or "Dinner at Luna". Describe the event, not the chat. null if you cannot tell what it is.
 - questions: short questions for the host about anything ambiguous (two people with the same name, plus-ones, unclear date, hedged replies). Do not ask about things that are clear.`;
 
 /** Talks to Gemini: key in a header, timeout, one retry, a model fallback chain, validated output. */

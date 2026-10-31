@@ -8,6 +8,8 @@ export interface AppConfig {
   maxGuests: number;
   /** PayPal's recommended capture window after authorization. */
   honorPeriodDays: number;
+  /** An excuse sent at least this many hours before the start counts as timely. Shown to the host as a fact; the host still decides. */
+  graceHours: number;
   /** Observed sandbox capture fee, used only for the pre-settlement estimate. */
   captureFeeBps: number;
   captureFeeFixedCents: number;
@@ -27,6 +29,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   minPayoutPerPersonCents: 100,
   maxGuests: 12,
   honorPeriodDays: 3,
+  graceHours: 2,
   captureFeeBps: 349,
   captureFeeFixedCents: 49,
   eventsPerMinute: 20,
@@ -49,6 +52,7 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().trim().min(1).default('gemini-3.5-flash-lite'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
+  GRACE_HOURS: int(DEFAULT_CONFIG.graceHours),
   CAPTURE_FEE_BPS: int(DEFAULT_CONFIG.captureFeeBps),
   CAPTURE_FEE_FIXED_CENTS: int(DEFAULT_CONFIG.captureFeeFixedCents),
   EVENTS_PER_MINUTE: int(DEFAULT_CONFIG.eventsPerMinute),
@@ -64,6 +68,7 @@ export function loadEnv(env: NodeJS.ProcessEnv) {
     payoutFeePerItemCents: e.PAYOUT_FEE_PER_ITEM_CENTS,
     minPayoutPerPersonCents: e.MIN_PAYOUT_PER_PERSON_CENTS,
     maxGuests: e.MAX_GUESTS,
+    graceHours: e.GRACE_HOURS,
     captureFeeBps: e.CAPTURE_FEE_BPS,
     captureFeeFixedCents: e.CAPTURE_FEE_FIXED_CENTS,
     eventsPerMinute: e.EVENTS_PER_MINUTE,

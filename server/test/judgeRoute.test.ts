@@ -63,6 +63,22 @@ describe('POST /api/host/:token/judge', () => {
     expect(cyView).toMatchObject({ decision: 'capture', ai: { recommendation: 'forgive' } });
   });
 
+  it('adds the timing fact in code (minutes before the start) and the host\'s grace setting', async () => {
+    const { U, cy, dee } = await ended();
+    // The harness event starts 24h after 2026-11-01 12:00Z, i.e. 2026-11-02 12:00 in UTC.
+    const stamped = '[11/2/26, 9:00 AM] Cy: car broke down on the highway, told you at 9\n[11/2/26, 12:30 PM] Dee: lol overslept';
+    h.judge.willReturn({ verdicts: [
+      { guestId: cy.id, recommendation: 'forgive', reason: 'Car trouble, told the group.', evidence: 'car broke down on the highway' },
+      { guestId: dee.id, recommendation: 'capture', reason: 'Overslept.', evidence: 'lol overslept' },
+    ] });
+    const r = await h.api('POST', `${U}/judge`, { chat: stamped, timeZone: 'UTC' });
+    const g = Object.fromEntries(r.body.guests.map((x: any) => [x.name, x]));
+    expect(g.Cy.ai.minutesBeforeStart).toBe(180);   // told the group 3h before
+    expect(g.Dee.ai.minutesBeforeStart).toBe(-30);  // 30 min after the start
+    expect(r.body.graceMinutes).toBe(120);          // default 2h rule, shown to the host as a fact
+    expect(g.Cy.decision).toBeNull();               // facts do not decide
+  });
+
   it('does not keep the pasted chat anywhere', async () => {
     const { U, ev, cy, dee } = await ended();
     h.judge.willReturn(DRAFT(cy.id, dee.id));

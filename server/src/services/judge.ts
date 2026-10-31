@@ -43,7 +43,7 @@ export async function runJudge(ctx: Ctx, hostToken: string, raw: unknown): Promi
     await ctx.db.$transaction(verdicts.map((v: JudgeVerdict) =>
       ctx.db.guest.update({
         where: { id: v.guestId },
-        data: { aiRecommendation: v.recommendation, aiReason: v.reason, aiEvidence: v.evidence, aiFlag: v.flag },
+        data: { aiRecommendation: v.recommendation, aiReason: v.reason, aiEvidence: v.evidence, aiFlag: v.flag, aiMinutesBeforeStart: v.minutesBeforeStart },
       })));
     return loadHostEvent(ctx, hostToken);
   });

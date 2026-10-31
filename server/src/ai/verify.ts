@@ -7,7 +7,12 @@ import type { RsvpDraft, RsvpInput } from './types.js';
  * at temperature 0, the model sometimes invented guests ("Dee's sister") that nobody named.
  */
 
-export interface ChatMessage { author: string | null; text: string }
+export interface ChatMessage {
+  author: string | null;
+  text: string;
+  /** Local wall-clock time of the message, "YYYY-MM-DDTHH:mm", when the export has an unambiguous timestamp. */
+  at: string | null;
+}
 
 export interface ProposedGuest {
   name: string;
@@ -34,19 +39,85 @@ export interface RsvpProposal {
 export const norm = (s: string) =>
   s.normalize('NFKC').toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
 
-const LINE = /^(?:\[[^\]]{3,40}\]\s*|\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?\s*[-–]\s*)?([^:\n]{1,40}?):\s+(.*)$/i;
+const LINE = /^(?:\[([^\]]{3,40})\]\s*|(\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?)\s*[-–]\s*)?([^:\n]{1,40}?):\s+(.*)$/i;
+
+interface RawStamp { a: number; b: number; c: number | null; hh: number; mm: number; iso: { y: number; m: number; d: number } | null }
+
+function rawStamp(text: string): RawStamp | null {
+  const t = text.trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})[ T,]+(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]\.?m\.?)?/i.exec(t);
+  if (m) return { a: 0, b: 0, c: null, hh: to24(Number(m[4]), m[6]), mm: Number(m[5]), iso: { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) } };
+  m = /^(\d{1,4})[/.-](\d{1,2})(?:[/.-](\d{1,4}))?,?\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap]\.?m\.?)?/i.exec(t);
+  if (!m) return null;
+  return { a: Number(m[1]), b: Number(m[2]), c: m[3] ? Number(m[3]) : null, hh: to24(Number(m[4]), m[6]), mm: Number(m[5]), iso: null };
+}
+const to24 = (h: number, ap?: string) => (ap ? (h % 12) + (/^p/i.test(ap) ? 12 : 0) : h);
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Turns the raw stamps of one chat into local "YYYY-MM-DDTHH:mm" strings. The day/month order is read
+ * from the chat itself (a 31 or a 13 settles it); if every stamp is ambiguous we say nothing rather than
+ * guess, because a wrong date would give a wrong "hours before" claim. Stamps without a year take the
+ * year of `reference` (the event start), stepping back a year if that would put them well after it.
+ */
+function resolveStamps(raws: (RawStamp | null)[], reference: string | undefined): (string | null)[] {
+  let order: 'mdy' | 'dmy' | null = null;
+  for (const r of raws) {
+    if (!r || r.iso) continue;
+    if (r.a > 12) { order = 'dmy'; break; }
+    if (r.b > 12) { order = 'mdy'; break; }
+  }
+  const refMs = reference ? Date.parse(`${reference.replace(' ', 'T')}:00Z`) : NaN;
+  // Every stamp looks like 11/7: use the event's own date to pick the reading (Nov 7 vs July 11). Only
+  // when exactly one reading falls within a fortnight before to a week after the event do we trust it.
+  if (!order && Number.isFinite(refMs)) {
+    const near = (mo: number, d: number, r: RawStamp) => {
+      const y = r.c !== null ? (r.c < 100 ? 2000 + r.c : r.c) : new Date(refMs).getUTCFullYear();
+      const t = Date.UTC(y, mo - 1, d, r.hh, r.mm);
+      return t >= refMs - 14 * 86_400_000 && t <= refMs + 7 * 86_400_000;
+    };
+    for (const r of raws) {
+      if (!r || r.iso || r.a === r.b) continue;
+      const mdy = near(r.a, r.b, r);
+      const dmy = near(r.b, r.a, r);
+      if (mdy !== dmy) { order = mdy ? 'mdy' : 'dmy'; break; }
+    }
+  }
+  return raws.map((r) => {
+    if (!r) return null;
+    let y: number, mo: number, d: number;
+    if (r.iso) ({ y, m: mo, d } = r.iso);
+    else {
+      if (!order) return null;
+      [mo, d] = order === 'mdy' ? [r.a, r.b] : [r.b, r.a];
+      if (r.c !== null) y = r.c < 100 ? 2000 + r.c : r.c;
+      else if (Number.isFinite(refMs)) {
+        y = new Date(refMs).getUTCFullYear();
+        if (Date.UTC(y, mo - 1, d, r.hh, r.mm) > refMs + 14 * 86_400_000) y -= 1;
+      } else return null;
+    }
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || r.hh > 23 || r.mm > 59) return null;
+    const out = `${y}-${pad(mo)}-${pad(d)}T${pad(r.hh)}:${pad(r.mm)}`;
+    return Number.isNaN(Date.parse(`${out}:00Z`)) ? null : out;
+  });
+}
 
 /** Splits "Name: text" lines (plain or WhatsApp-style); unlabeled lines continue the previous message. */
-export function parseChat(chat: string): ChatMessage[] {
+export function parseChat(chat: string, opts: { reference?: string } = {}): ChatMessage[] {
   const out: ChatMessage[] = [];
+  const raws: (RawStamp | null)[] = [];
   for (const raw of chat.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
     const m = LINE.exec(line);
-    if (m && m[1] && !/^\d+$/.test(m[1].trim())) out.push({ author: m[1].trim(), text: (m[2] ?? '').trim() });
-    else if (out.length) out[out.length - 1]!.text += ` ${line}`;
-    else out.push({ author: null, text: line });
+    if (m && m[3] && !/^\d+$/.test(m[3].trim())) {
+      out.push({ author: m[3].trim(), text: (m[4] ?? '').trim(), at: null });
+      raws.push(m[1] || m[2] ? rawStamp(m[1] ?? m[2] ?? '') : null);
+    } else if (out.length) out[out.length - 1]!.text += ` ${line}`;
+    else { out.push({ author: null, text: line, at: null }); raws.push(null); }
   }
+  const stamps = resolveStamps(raws, opts.reference);
+  out.forEach((msg, i) => { msg.at = stamps[i] ?? null; });
   return out;
 }
 

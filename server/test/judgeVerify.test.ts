@@ -80,3 +80,49 @@ describe('verifyJudge', () => {
     expect(r!.reason.length).toBeLessThanOrEqual(200);
   });
 });
+
+describe('verifyJudge: timing is computed in code from the chat timestamps', () => {
+  // Event starts Sat Nov 7 2026, 18:00 local.
+  const TIMED = `[11/7/26, 3:05:12 PM] Sam: where is everyone??
+[11/7/26, 3:10 PM] Cy: so sorry, my car broke down, I messaged you at 3pm I was stuck
+11/7/26, 6:20 PM - Dee: lol overslept
+[11/7/26, 9:40 AM] Eli: running late tomorrow`;
+  const tin = (names: [string, string][], chat = TIMED, startedAtLocal = '2026-11-07 18:00'): JudgeInput => ({
+    chat, eventTitle: 'Court', startedAtLocal, timeZone: 'Asia/Manila', noShows: names.map(([id, name]) => ({ id, name })),
+  });
+  const go = (verdicts: JudgeDraft['verdicts'], names: [string, string][], chat?: string, start?: string) =>
+    verifyJudge({ verdicts }, tin(names, chat, start));
+
+  it('says how long before the start the quoted message was written (3h50 here)', () => {
+    const [r] = go([v('c', 'forgive', 'Car trouble.', 'my car broke down')], [['c', 'Cy']]);
+    expect(r).toMatchObject({ recommendation: 'forgive', minutesBeforeStart: 170 }); // 15:10 -> 18:00 = 170 min
+  });
+  it('is negative when the message came after the start', () => {
+    const [r] = go([v('d', 'capture', 'Overslept.', 'overslept')], [['d', 'Dee']]);
+    expect(r!.minutesBeforeStart).toBe(-20);
+  });
+  it('is null when the chat has no timestamps, or the quote is not verified', () => {
+    const [a] = verifyJudge({ verdicts: [v('c', 'forgive', 'x', 'car broke down')] }, { ...tin([['c', 'Cy']], CHAT_NO_STAMPS) });
+    expect(a!.minutesBeforeStart).toBeNull();
+    const [b] = go([v('c', 'forgive', 'x', 'I was in hospital')], [['c', 'Cy']]);
+    expect(b).toMatchObject({ recommendation: 'unclear', minutesBeforeStart: null });
+  });
+  it('reads day-first exports: 7/11 is 7 November when only that reading is near the event', () => {
+    const dmy = `7/11/2026, 15:10 - Cy: car broke down\n7/11/2026, 15:11 - Dee: ok`;
+    const [d] = go([v('c', 'forgive', 'x', 'car broke down')], [['c', 'Cy']], dmy);
+    expect(d!.minutesBeforeStart).toBe(170);
+  });
+  it('a day above 12 settles the order for the whole chat, even for the ambiguous lines', () => {
+    const chat = `[31/10/2026, 10:00] Sam: where?\n[7/11/2026, 15:10] Cy: car broke down`;
+    const [r] = go([v('c', 'forgive', 'x', 'car broke down')], [['c', 'Cy']], chat);
+    expect(r!.minutesBeforeStart).toBe(170);
+  });
+  it('says nothing rather than guess when nothing settles the date', async () => {
+    const { parseChat } = await import('../src/ai/verify.js');
+    expect(parseChat('[11/7/26, 3:10 PM] Cy: x')[0]!.at).toBeNull(); // no reference date, ambiguous
+    expect(parseChat('[11/7/26, 3:10 PM] Cy: x', { reference: '2027-03-01T10:00' })[0]!.at).toBeNull(); // neither reading is near
+    expect(parseChat('[11/7/26, 3:10 PM] Cy: x', { reference: '2026-11-07T18:00' })[0]!.at).toBe('2026-11-07T15:10');
+    expect(parseChat('Cy: no stamp at all', { reference: '2026-11-07T18:00' })[0]!.at).toBeNull();
+  });
+});
+const CHAT_NO_STAMPS = 'Cy: car broke down on the highway';

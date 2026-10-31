@@ -29,9 +29,9 @@ describe('parseChat', () => {
   it('reads plain and WhatsApp-style lines and joins continuations', () => {
     const m = parseChat('[10/31, 6:02 PM] Ana: I\'m in\nsecond line\n10/31/25, 6:03 PM - Ben Lee: maybe\nSam: ok');
     expect(m).toEqual([
-      { author: 'Ana', text: "I'm in second line" },
-      { author: 'Ben Lee', text: 'maybe' },
-      { author: 'Sam', text: 'ok' },
+      { author: 'Ana', text: "I'm in second line", at: null }, // "[10/31, 6:02 PM]" has no year and no reference date was given
+      { author: 'Ben Lee', text: 'maybe', at: '2025-10-31T18:03' },
+      { author: 'Sam', text: 'ok', at: null },
     ]);
   });
 });

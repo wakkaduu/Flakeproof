@@ -40,6 +40,7 @@ model Guest {
   aiReason         String?
   aiEvidence       String? // exact quote from the no-show's own message, verified against the chat
   aiFlag           String? // addresses_the_ai
+  aiMinutesBeforeStart Int? // when the quoted message was written, relative to the start (computed in code)
   createdAt   DateTime @default(now())
 
   event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
