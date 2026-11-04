@@ -26,7 +26,7 @@ the approval screen, not typing passwords. Keep the host in a separate window.
 |---|---|---|
 | 0:00-0:15 | The problem: a booked court, a friend who flakes | One line of voiceover, app home |
 | 0:15-0:45 | Add the chat as screenshots (decoy chat, see below), AI reads it, host checks the transcript, then reviews | The "sister" question and the dropped invented guest, deposit verified from the organizer's message |
-| 0:45-1:15 | Four friends approve a hold on PayPal | Hold messages; "nothing is charged" (cut between logins) |
+| 0:45-1:15 | The host copies the ONE chat message; four friends open the same link, tap their name, approve a hold on PayPal | The join page, then the hold confirmed; "nothing is charged" (cut between logins) |
 | 1:15-1:30 | "Event ended", mark who came | Host page |
 | 1:30-2:00 | The Judge reads the excuse | Recommendation with the quote; host clicks, nothing pre-selected |
 | 2:00-2:30 | Settle: three voids, one capture, payout to the three | Payout items reaching SUCCESS (cut the wait) |
@@ -35,7 +35,7 @@ the approval screen, not typing passwords. Keep the host in a separate window.
 ## Rehearsal checklist
 
 1. `rm server/prisma/dev.db && npm run db:deploy -w server` for a clean database.
-2. `npm run dev`; open the app; run the full story once with the four accounts.
+2. `npm run dev`; open the app; run the full story once with the four accounts. The host creates the event from the plain form (no chat reading needed), copies the message, and each buyer opens the same `/e/...` link in its own private window and taps or types a name. Also try: one friend releasing their own spot, a host who chooses "keep" instead of "share", and an event a week away (deposits not open yet).
 3. Time each beat; anything over its slot gets a cut or a pre-made state.
 4. Check the PayPal pages in the footage only show PayPal screens incidentally (no logos in our own UI).
 5. No copyrighted music. Record the screen of the device the app was built for.

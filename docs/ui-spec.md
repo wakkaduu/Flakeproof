@@ -1,3 +1,61 @@
+# Flakeproof: UI spec v2 (Nov 3, supersedes the money lane and stepper below)
+
+**Why v2.** The first redesign still looked like a fintech dashboard: slate and black, tiny uppercase labels, a "money lane" and a
+five-step stepper that only make sense once you already know the product. A friend opening a link from a group chat expects
+an *invitation* (Partiful, Evite, Luma, Apple Invites), not a payments console. v2 keeps the honest copy and every state, and
+changes the look and the structure to what people already know. Nov 3 evening: emoji removed and radii calmed so it reads
+professional without turning back into a dashboard.
+
+## What normally happens in a friend group (and what we changed because of it)
+| Reality | Old design | v2 |
+|---|---|---|
+| The host pastes **one link into the group chat**; nobody DMs 8 people one by one | One personal link per friend, host copies each | **One shared link** `/e/:code`. Friends tap their name (or type it) and get their own page. Personal links still exist as the capability, remembered on the phone |
+| The host types "Sat 5pm, court, $15" rather than screenshotting 50 messages | Chat reading was step 1 | **A plain form is step 1.** "Fill it in from the group chat (AI)" is an optional shortcut at the top |
+| Plans are made a week ahead; PayPal honors a hold 3 days | A warning only | Friends join any time; **holds open 3 days before** (calendar reminder download, plus a ready "holds are open" message for the chat) |
+| People cancel in the chat, not in an app, and hosts want 24 h notice for a booking | Fixed 2 h cutoff | **The host picks the free-cancellation cutoff** (default 24 h) |
+| Most people show up; tapping everyone is tedious | Tap Came for each | **"Everyone came"**, then fix the exceptions |
+| A host who paid for the court wants the court paid for, not a $6 split | Pot always shared | **Host chooses**: share with the people who came (default) or keep it |
+| Hosts forget to press "end" and settle | Several steps | One **"What's next"** card on top, with the real button in it |
+| Friends join late in the game | Could still start a hold after the start | **Holds close at the start time** |
+
+## Look
+- Warm paper background, one brand colour (indigo) for actions, three status colours used only for meaning:
+  green = in / free / came, amber = waiting / reserved, rose = charged. No PayPal blue (we are not PayPal).
+- Big friendly type (title 30/34, body 17), 16-20 px radius, generous spacing, one primary button per screen, 52 px tall.
+- An **event header** on a calm white card with one indigo accent edge: the name, then when. **No emoji anywhere** (a test enforces it);
+  icons are small inline SVGs, and every status is a word.
+- **People are avatars** (initials on a soft colour) with a plain word beside them: "In", "Waiting", "Can't come", "Came",
+  "Didn't come". Money words appear only where money moves.
+- Removed: the money lane, the stepper, the uppercase micro-labels.
+
+## Words
+**Few of them.** One idea per screen. Explanations live behind a tap (`How it works`, `How the deposit works`), the sandbox note is a
+small "Sandbox" tag beside the logo instead of a sentence on every page, and a line is only shown if the status chip cannot say it.
+A test (`web/test/copyBudget.test.tsx`) caps the visible words per screen (landing 75, join 35, friend about to pay 50, host 60).
+Say "deposit" and "hold" (people know it from hotels and fuel pumps) and explain once: "PayPal sets aside $20. Nothing is charged
+if you come." Avoid capture / void / authorize / settle in the UI. Buttons: "Put down the deposit", "I can't make it",
+"Everyone came", "Charge $20" / "Forgive", "Pay out and finish".
+
+## Screens
+1. **Landing**: promise, one button, four plain steps with small icons, the sandbox note. Recent events on this device.
+2. **New event**: *What* (name), *When*, *Deposit*, then "More options" (free cancellation, where a flake's money goes, names
+   to pre-list). Shortcut card: "Have the plan in a chat? Let the AI fill this in."
+3. **Share**: ONE link with "Copy message for the group chat" (text already written) and the system share sheet; the host link is
+   a separate, clearly private card; "Open event page".
+4. **Join** `/e/:code` (what friends see first): the invitation, "Who are you?" as name chips (listed names) plus "Someone else",
+   a count of people already in. Coming back on the same phone goes straight to the friend's own page.
+5. **Friend page**: invitation header, one status card, one primary button. States: not joined yet is the join page; holds not
+   open yet (date, calendar reminder); ready to put the deposit down; in; can't make it (confirm); released; event over (free /
+   charged / received); closed.
+6. **Host page**: header, **What's next** card (the real button), the people list, money in one line, then the AI and
+   approval cards. Desktop is two columns; the next card stays on top.
+
+## Accessibility (kept)
+Every status is a word, not only a colour; 44 px targets; visible focus; headings per screen; polite live region for changes; reduced motion
+removes the one check animation; contrast checked on the three status pairs.
+
+---
+
 # Flakeproof: UX audit and redesign spec
 
 Design is one fifth of the hackathon score ("a complete, coherent product experience, not just a technical proof
