@@ -370,7 +370,10 @@ describe('boundaries and access', () => {
     expect((await bad({ depositCents: 20.5 })).status).toBe(400);
     expect((await bad({ depositCents: 100_000_000 })).status).toBe(400); // beyond what PayPal money strings can safely carry
     expect((await bad({ guests: [{ name: 'A' }, { name: 'a' }] })).body.error.code).toBe('duplicate_guest');
-    expect((await bad({ guests: [] })).status).toBe(400);
+    expect((await bad({ guests: [] })).status).toBe(201); // names are optional now: friends add themselves from the shared link
+    expect((await bad({ graceHours: 100 })).status).toBe(400);
+    expect((await bad({ graceHours: -1 })).status).toBe(400);
+    expect((await bad({ potMode: 'everyone' })).status).toBe(400);
     expect((await bad({ title: '   ' })).status).toBe(400);
   });
 

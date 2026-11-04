@@ -48,7 +48,8 @@ describe('POST /api/host/:token/judge', () => {
     await h.api('POST', `${U}/judge`, { chat: CHAT, timeZone: 'Asia/Manila' });
     const sent = h.judge.inputs[0]!;
     expect(sent.noShows.map((n) => n.name)).toEqual(['Cy', 'Dee']);
-    expect(JSON.stringify(sent)).not.toMatch(/2000|\$|cents|amount/i);
+    // Ids are random cuids and can contain digits by chance, so look at everything except them.
+    expect(JSON.stringify({ ...sent, noShows: sent.noShows.map((n) => n.name) })).not.toMatch(/2000|\$|cents|amount/i);
     expect(sent.startedAtLocal).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 

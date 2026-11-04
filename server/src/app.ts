@@ -4,10 +4,11 @@ import express, { type NextFunction, type Request, type Response, Router } from 
 import { z } from 'zod';
 import type { Ctx } from './context.js';
 import { AppError, errorHandler, notFound } from './errors.js';
-import { finalizeDeposit, getGuestView, startDeposit } from './services/deposits.js';
+import { cancelGuest, finalizeDeposit, getGuestView, startDeposit } from './services/deposits.js';
 import {
-  CreateEventInput, createEvent, endEvent, hostView, loadHostEvent, markAttendance, setDecision,
+  CreateEventInput, createEvent, endEvent, hostView, loadHostEvent, markAllCame, markAttendance, removeGuest, setDecision,
 } from './services/events.js';
+import { getJoinView, joinEvent } from './services/join.js';
 import { runJudge } from './services/judge.js';
 import { parseRsvp } from './services/rsvp.js';
 import { assembleChat, SCREENSHOT_BODY_LIMIT, transcribeScreenshot } from './services/screenshots.js';
@@ -43,6 +44,7 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
 
   const aiLimiter = new RateLimiter(ctx.config.rsvpPerMinute, 60_000);
   const eventsLimiter = new RateLimiter(ctx.config.eventsPerMinute, 60_000);
+  const joinLimiter = new RateLimiter(ctx.config.joinsPerMinute, 60_000);
   const screenshotLimiter = new RateLimiter(ctx.config.screenshotsPerMinute, 60_000);
   const api = Router();
   api.get('/health', (_req, res) => { res.json({ ok: true }); });
@@ -78,6 +80,7 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
     res.status(201).json({
       hostToken,
       hostUrl: `${ctx.config.appBaseUrl}/host/${hostToken}`,
+      joinUrl: `${ctx.config.appBaseUrl}/e/${event.joinToken}`,
       event: hostView(ctx, event),
     });
   });
@@ -102,6 +105,13 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
     const body = z.object({ attendance: z.enum(['showed', 'no_show']) }).parse(req.body);
     res.json(hostView(ctx, await markAttendance(ctx, Token.parse(req.params.token), Id.parse(req.params.guestId), body.attendance)));
   });
+  // "Everyone came": marks everyone with a hold who is not marked yet. The host then fixes the exceptions.
+  api.post('/host/:token/attendance/all-came', async (req, res) => {
+    res.json(hostView(ctx, await markAllCame(ctx, Token.parse(req.params.token))));
+  });
+  api.delete('/host/:token/guests/:guestId', async (req, res) => {
+    res.json(hostView(ctx, await removeGuest(ctx, Token.parse(req.params.token), Id.parse(req.params.guestId))));
+  });
   api.put('/host/:token/guests/:guestId/decision', async (req, res) => {
     const body = z.object({ decision: z.enum(['capture', 'forgive']) }).parse(req.body);
     res.json(hostView(ctx, await setDecision(ctx, Token.parse(req.params.token), Id.parse(req.params.guestId), body.decision)));
@@ -112,11 +122,23 @@ export function createApp(ctx: Ctx, opts: { webDir?: string; trustProxy?: number
     res.json(hostView(ctx, await settle(ctx, Token.parse(req.params.token))));
   });
 
+  // ---- the one link for the group chat: pick or type your name, get your own link ----
+  api.get('/join/:code', async (req, res) => { res.json(await getJoinView(ctx, Token.parse(req.params.code))); });
+  api.post('/join/:code', async (req, res) => {
+    if (!joinLimiter.allow(req.ip ?? 'unknown')) {
+      res.setHeader('Retry-After', '30');
+      throw new AppError(429, 'rate_limited', 'Too many tries. Wait a moment and try again.');
+    }
+    res.status(201).json(await joinEvent(ctx, Token.parse(req.params.code), req.body));
+  });
+
   // ---- guest (one link, no account) ----
     api.get('/g/:invite', async (req, res) => { res.json(await getGuestView(ctx, Token.parse(req.params.invite))); });
   // No body is read: the amount is decided by the server from the event.
   api.post('/g/:invite/deposit', async (req, res) => { res.json(await startDeposit(ctx, Token.parse(req.params.invite))); });
   api.post('/g/:invite/authorize', async (req, res) => { res.json(await finalizeDeposit(ctx, Token.parse(req.params.invite))); });
+  // "I can't make it": releases the friend's own hold if it is early enough, otherwise only warns the host.
+  api.post('/g/:invite/cancel', async (req, res) => { res.json(await cancelGuest(ctx, Token.parse(req.params.invite))); });
 
   app.use('/api', api);
   app.use('/api', (_req, _res, next) => next(notFound('No such endpoint')));

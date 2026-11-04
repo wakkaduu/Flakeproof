@@ -7,9 +7,10 @@ import { AppError, conflict, notFound } from '../errors.js';
 import { hashToken, maskEmail, newToken } from '../util.js';
 import { formatCents } from '../domain/money.js';
 import type { AppConfig } from '../config.js';
+import { holdWindow } from '../domain/schedule.js';
 import { payoutPreview } from './preview.js';
 import {
-  attendanceOf, BAD_PAYOUT_STATUSES, decisionOf, depositStatusOf, eventInclude,
+  attendanceOf, BAD_PAYOUT_STATUSES, decisionOf, depositStatusOf, eventInclude, releasedEarly,
   type EventFull,
 } from './shared.js';
 
@@ -19,7 +20,12 @@ export const CreateEventInput = z.object({
   // No product limits on the amount. The ceiling only keeps the value inside what we can
   // format and parse safely as PayPal money ($999,999.99).
   depositCents: z.number().int().min(1).max(99_999_999),
-  guests: z.array(z.object({ name: z.string().trim().min(1).max(60) })).min(1),
+  // Names are optional: the host can paste one join link into the chat and let people add themselves.
+  guests: z.array(z.object({ name: z.string().trim().min(1).max(60) })).default([]),
+  /** Free cancellation: hours before the start until a friend may release their own hold. */
+  graceHours: z.number().int().min(0).max(72).optional(),
+  /** Where a no-show's charged deposit goes. */
+  potMode: z.enum(['share', 'keep']).default('share'),
 });
 export type CreateEventInput = z.infer<typeof CreateEventInput>;
 
@@ -40,6 +46,9 @@ export async function createEvent(ctx: Ctx, input: CreateEventInput) {
       depositCents: input.depositCents,
       currency: config.currency,
       hostTokenHash: hashToken(hostToken),
+      joinToken: newToken(),
+      graceHours: input.graceHours ?? config.graceHours,
+      potMode: input.potMode,
       guests: { create: input.guests.map((g) => ({ name: g.name, inviteToken: newToken() })) },
     },
     include: eventInclude,
@@ -75,11 +84,40 @@ export async function markAttendance(ctx: Ctx, hostToken: string, guestId: strin
     assertEditable(fresh);
     const guest = fresh.guests.find((g) => g.id === guestId);
     if (!guest) throw notFound('Guest not found');
+    if (releasedEarly(guest)) throw conflict('released', `${guest.name} released their own hold, so they are not part of this event.`);
     await ctx.db.guest.update({
       where: { id: guest.id },
       // A decision only makes sense for no-shows.
       data: { attendance, ...(attendance === 'showed' ? { decision: null } : {}) },
     });
+    return loadHostEvent(ctx, hostToken);
+  });
+}
+
+/** "Everyone came": marks everyone who has a hold and is not marked yet, so the host only taps the exceptions. */
+export async function markAllCame(ctx: Ctx, hostToken: string): Promise<EventFull> {
+  const ev = await loadHostEvent(ctx, hostToken);
+  return ctx.mutex.run(`event:${ev.id}`, async () => {
+    const fresh = await loadHostEvent(ctx, hostToken);
+    assertEditable(fresh);
+    const ids = fresh.guests
+      .filter((g) => !releasedEarly(g) && attendanceOf(g) === 'unknown' && g.deposit && depositStatusOf(g.deposit) === 'authorized')
+      .map((g) => g.id);
+    if (ids.length) await ctx.db.guest.updateMany({ where: { id: { in: ids } }, data: { attendance: 'showed', decision: null } });
+    return loadHostEvent(ctx, hostToken);
+  });
+}
+
+/** Takes a name off the list (a typo, or someone who is not invited). Only before they have put money down. */
+export async function removeGuest(ctx: Ctx, hostToken: string, guestId: string): Promise<EventFull> {
+  const ev = await loadHostEvent(ctx, hostToken);
+  return ctx.mutex.run(`event:${ev.id}`, async () => {
+    const fresh = await loadHostEvent(ctx, hostToken);
+    if (fresh.status !== 'open' || fresh.settlementStartedAt) throw conflict('not_open', 'People can only be removed while the event is open.');
+    const guest = fresh.guests.find((g) => g.id === guestId);
+    if (!guest) throw notFound('Guest not found');
+    if (guest.deposit && depositStatusOf(guest.deposit) !== 'pending') throw conflict('has_hold', `${guest.name} already has a hold in place. Release it from the guest's own link, or mark them as not coming.`);
+    await ctx.db.guest.delete({ where: { id: guest.id } });
     return loadHostEvent(ctx, hostToken);
   });
 }
@@ -143,12 +181,20 @@ export function hostView(ctx: Ctx, ev: EventFull) {
     return {
       id: g.id,
       name: g.name,
+      /** Picked their name from the shared link, or put a hold down. A name nobody has claimed can be given a personal link by the host. */
+      joined: g.claimedAt !== null || !!dep || g.cancelKind !== null,
       inviteUrl: `${ctx.config.appBaseUrl}/g/${g.inviteToken}`,
       attendance: attendanceOf(g),
       decision: decisionOf(g),
       /** The AI's verified recommendation, or null. Never pre-selects the decision. */
       ai: g.aiRecommendation ? { recommendation: g.aiRecommendation as 'capture' | 'forgive' | 'unclear', reason: g.aiReason ?? '', evidence: g.aiEvidence, flag: g.aiFlag as 'addresses_the_ai' | null, minutesBeforeStart: g.aiMinutesBeforeStart } : null,
-      stage: deriveGuestStage({ attendance: attendanceOf(g), depositStatus: dep ? depositStatusOf(dep) : null, payoutItemStatus: item?.status ?? null }),
+      stage: deriveGuestStage({ attendance: attendanceOf(g), depositStatus: dep ? depositStatusOf(dep) : null, payoutItemStatus: item?.status ?? null, releasedEarly: releasedEarly(g) }),
+      /** The friend's own "I can't make it", if any: a plain fact with its timing, never a decision. */
+      cancel: g.cancelKind ? {
+        kind: g.cancelKind as 'released' | 'late_notice',
+        at: g.cancelledAt?.toISOString() ?? null,
+        minutesBeforeStart: g.cancelledAt ? Math.round((ev.startsAt.getTime() - g.cancelledAt.getTime()) / 60_000) : null,
+      } : null,
       deposit: dep && {
         status: depositStatusOf(dep), amountCents: dep.amountCents, feeCents: dep.feeCents, netCents: dep.netCents,
         payerEmail: maskEmail(dep.payerEmail),
@@ -161,7 +207,7 @@ export function hostView(ctx: Ctx, ev: EventFull) {
   if (preview?.unpayableNames.length) {
     problems.push(`${preview.unpayableNames.join(', ')}: PayPal gave no email address for the payment, so they cannot be paid their share.`);
   }
-  if (ev.payout?.batchStatus === 'SKIPPED' && ev.payout.potCents > 0) {
+  if (ev.payout?.batchStatus === 'SKIPPED' && ev.payout.potCents > 0 && ev.payout.skippedReason !== 'kept_by_host') {
     problems.push(`${formatCents(ev.payout.potCents)} was captured but could not be paid out (${ev.payout.skippedReason}). It is in your PayPal account; pay it out or refund it by hand.`);
   }
   // Not limits, just honesty: the host may pick any start time, but PayPal only guarantees a
@@ -169,7 +215,7 @@ export function hostView(ctx: Ctx, ev: EventFull) {
   const warnings: string[] = [];
   const daysAway = (ev.startsAt.getTime() - now) / 86_400_000;
   if (ev.status === 'open' && daysAway > ctx.config.honorPeriodDays) {
-    warnings.push(`This event starts in about ${Math.ceil(daysAway)} days. PayPal only guarantees a hold for ${ctx.config.honorPeriodDays} days, so a deposit placed now may no longer be capturable after the event.`);
+    warnings.push(`About ${Math.ceil(daysAway)} days away. Friends can join now; deposits open ${ctx.config.honorPeriodDays} days before the start.`);
   }
   return {
     id: ev.id,
@@ -178,8 +224,12 @@ export function hostView(ctx: Ctx, ev: EventFull) {
     depositCents: ev.depositCents,
     currency: ev.currency,
     status: ev.status as EventStatus,
-    /** Excuses sent at least this long before the start count as timely (a fact shown to the host, not a rule that decides). */
-    graceMinutes: ctx.config.graceHours * 60,
+    /** Free-cancellation cutoff, and the line for a timely excuse (a fact shown to the host, not a rule that decides). */
+    graceMinutes: ev.graceHours * 60,
+    potMode: ev.potMode as 'share' | 'keep',
+    /** The one link for the group chat. Null only for events made before join links existed. */
+    joinUrl: ev.joinToken ? `${ctx.config.appBaseUrl}/e/${ev.joinToken}` : null,
+    holdsOpenAt: holdWindow(ev.startsAt, ctx.config.honorPeriodDays, ctx.now()).opensAt.toISOString(),
     settlementApproved: ev.settlementStartedAt !== null,
     canSettle: ev.status === 'ended' && blockers.length === 0,
     blockers,

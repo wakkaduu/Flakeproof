@@ -19,6 +19,17 @@ Honest summary for a hackathon prototype that only ever touches the PayPal **san
 - **Headers.** Strict CSP (self only, no inline script/style), `X-Frame-Options: DENY`, no-referrer, no-store.
 - **No chat is stored.**
 
+## The shared join link (Nov 3)
+
+- It is a bearer link (192-bit) that only lets someone **add or claim a name**. It cannot read another friend's page, cannot see
+  anyone's personal link, and cannot move money. Claiming a listed name is once-only, so a stranger who has the link could claim an
+  unclaimed name before the real person does; the host sees every name and can remove one that has no hold.
+- Rate limited per client (30 joins per minute), capped at `MAX_GUESTS` per event, names are case-insensitively unique, and joining
+  closes at the start time. The personal link stays the credential; it is remembered on the friend's phone in `localStorage`
+  (`flakeproof.joined`), validated on read, never trusted for anything but a redirect.
+- Early release (`/g/:invite/cancel`) needs the friend's own link, runs under the event and guest locks, voids only that guest's hold
+  with a request id derived from our deposit id, and cannot be used after the host has marked attendance or the event has ended.
+
 ## Known limits (accepted for the prototype)
 
 - **No refund path.** The server refuses to capture money nobody could receive; if a capture still ends up

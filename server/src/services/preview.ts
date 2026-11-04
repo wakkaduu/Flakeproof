@@ -1,6 +1,6 @@
 import type { AppConfig } from '../config.js';
 import { estimateCaptureNet, planPayout } from '../domain/money.js';
-import { attendanceOf, decisionOf, depositStatusOf, type EventFull } from './shared.js';
+import { attendanceOf, decisionOf, depositStatusOf, releasedEarly, type EventFull } from './shared.js';
 
 /**
  * What would happen to the money if the host settled right now. An ESTIMATE (capture fees are
@@ -19,6 +19,8 @@ export interface PayoutPreview {
   problem: 'no_recipients' | 'pot_too_small' | null;
   /** Showed up and paid, but PayPal gave no email, so they cannot be paid. */
   unpayableNames: string[];
+  /** share = paid to the people who came; keep = the host keeps it. */
+  mode: 'share' | 'keep';
 }
 
 export function payoutPreview(ev: EventFull, cfg: AppConfig): PayoutPreview {
@@ -28,10 +30,14 @@ export function payoutPreview(ev: EventFull, cfg: AppConfig): PayoutPreview {
   const capturing = ev.guests.filter(
     (g) => g.deposit && attendanceOf(g) === 'no_show' && decisionOf(g) === 'capture' && depositStatusOf(g.deposit) !== 'voided',
   );
-  const attendees = ev.guests.filter((g) => g.deposit && attendanceOf(g) === 'showed' && depositStatusOf(g.deposit) !== 'captured');
+  const attendees = ev.guests.filter((g) => g.deposit && !releasedEarly(g) && attendanceOf(g) === 'showed' && depositStatusOf(g.deposit) !== 'captured');
   const recipients = attendees.filter((g) => g.deposit!.payerEmail);
   const unpayableNames = attendees.filter((g) => !g.deposit!.payerEmail).map((g) => g.name);
 
+  if (ev.potMode === 'keep') {
+    const kept = capturing.reduce((s, g) => s + (g.deposit!.netCents ?? estimateCaptureNet(g.deposit!.amountCents, { bps: cfg.captureFeeBps, fixedCents: cfg.captureFeeFixedCents })), 0);
+    return { provisional, capturingCount: capturing.length, recipientCount: 0, estimatedPotCents: kept, estimatedPerPersonCents: null, problem: null, unpayableNames: [], mode: 'keep' };
+  }
   const nets = capturing.map((g) =>
     // Use the real figure once the capture has happened.
     g.deposit!.netCents ?? estimateCaptureNet(g.deposit!.amountCents, { bps: cfg.captureFeeBps, fixedCents: cfg.captureFeeFixedCents }),
@@ -51,5 +57,6 @@ export function payoutPreview(ev: EventFull, cfg: AppConfig): PayoutPreview {
     estimatedPerPersonCents: perPerson,
     problem: capturing.length === 0 || plan.viable ? null : plan.reason === 'no_recipients' ? 'no_recipients' : 'pot_too_small',
     unpayableNames,
+    mode: 'share',
   };
 }

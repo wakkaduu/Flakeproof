@@ -23,6 +23,12 @@ const EVENT_TRANSITIONS: Record<EventStatus, readonly EventStatus[]> = {
 
 export type Attendance = 'unknown' | 'showed' | 'no_show';
 export type Decision = 'capture' | 'forgive';
+export type CancelKind = 'released' | 'late_notice';
+
+/** The last moment a friend can release their own hold without asking the host. Same rule the Judge uses. */
+export function releaseDeadline(startsAt: Date, graceHours: number): Date {
+  return new Date(startsAt.getTime() - graceHours * 3_600_000);
+}
 
 export class IllegalTransitionError extends Error {
   constructor(public readonly entity: string, public readonly from: string, public readonly to: string) {
@@ -54,14 +60,17 @@ export function settlementAction(
 }
 
 export type GuestStage =
-  | 'invited' | 'authorized' | 'showed' | 'no_show' | 'voided' | 'captured' | 'paid_out';
+  | 'invited' | 'authorized' | 'showed' | 'no_show' | 'voided' | 'captured' | 'paid_out' | 'cancelled';
 
 /** The per-guest story the host and guest see: invited -> authorized -> showed/no-show -> voided/captured -> paid out. */
 export function deriveGuestStage(g: {
   attendance: Attendance;
   depositStatus: DepositStatus | null;
   payoutItemStatus: string | null;
+  /** The friend released their own hold ahead of the cutoff. */
+  releasedEarly?: boolean;
 }): GuestStage {
+  if (g.releasedEarly) return 'cancelled';
   if (g.payoutItemStatus === 'SUCCESS') return 'paid_out';
   if (g.depositStatus === 'captured' || g.depositStatus === 'capture_pending') return 'captured';
   if (g.depositStatus === 'voided') return 'voided';

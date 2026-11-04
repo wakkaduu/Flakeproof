@@ -14,3 +14,6 @@ export const depositStatusOf = (d: { status: string }) => d.status as DepositSta
 
 /** PayPal payout item statuses that need a human; we never auto-retry money. */
 export const BAD_PAYOUT_STATUSES = new Set(['FAILED', 'RETURNED', 'BLOCKED', 'REFUNDED', 'REVERSED', 'UNCLAIMED', 'ONHOLD']);
+
+/** True when the friend released their own hold before the cutoff: out of the event, owed nothing, owed no share. */
+export const releasedEarly = (g: { cancelKind: string | null }) => g.cancelKind === 'released';

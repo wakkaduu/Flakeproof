@@ -15,6 +15,8 @@ export interface AppConfig {
   captureFeeFixedCents: number;
   /** Events a client may create per minute. */
   eventsPerMinute: number;
+  /** People who may join an event by name per client per minute (the join link is shared in a group chat). */
+  joinsPerMinute: number;
   /** Longest chat we will send to the AI. */
   rsvpMaxChars: number;
   /** RSVP parses allowed per client per minute (the AI key has a small free quota). */
@@ -35,6 +37,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   captureFeeBps: 349,
   captureFeeFixedCents: 49,
   eventsPerMinute: 20,
+  joinsPerMinute: 30,
   // About 8 screenshots of a busy chat, with a day and time on every line.
   rsvpMaxChars: 16_000,
   rsvpPerMinute: 10,

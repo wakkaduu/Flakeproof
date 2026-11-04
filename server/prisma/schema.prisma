@@ -18,6 +18,14 @@ model Event {
   currency            String
   hostTokenHash       String    @unique
   status              String    @default("open") // open | ended | settled
+  // One link the host pastes into the group chat. Anyone who has it can join by name (capped, host can remove).
+  // Nullable only so databases from before this column keep working; every new event has one.
+  joinToken           String?   @unique
+  // Free cancellation: a friend can release their own hold until this many hours before the start, and an
+  // excuse sent before it counts as timely for the AI Judge.
+  graceHours          Int       @default(2)
+  // Where a no-show's charged deposit goes: share = paid out to the people who came, keep = stays with the host.
+  potMode             String    @default("share") // share | keep
   endedAt             DateTime?
   settlementStartedAt DateTime? // set when the host approves; check-ins/decisions lock
   settledAt           DateTime?
@@ -41,6 +49,13 @@ model Guest {
   aiEvidence       String? // exact quote from the no-show's own message, verified against the chat
   aiFlag           String? // addresses_the_ai
   aiMinutesBeforeStart Int? // when the quoted message was written, relative to the start (computed in code)
+  // The friend's own "I can't make it" (set from their invite link). `released` = told us before the
+  // cutoff, so the hold was released automatically; `late_notice` = told us after it, so nothing
+  // changes and the host decides. Never decides money on its own except the early release.
+  // Set when the friend picked their name from the shared link (a pre-listed name can only be claimed once).
+  claimedAt   DateTime?
+  cancelledAt DateTime?
+  cancelKind  String? // released | late_notice
   createdAt   DateTime @default(now())
 
   event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)

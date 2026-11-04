@@ -6,7 +6,7 @@ import {
 import { AppError, conflict } from '../errors.js';
 import { PayPalError } from '../paypal/errors.js';
 import type { CaptureResult } from '../paypal/types.js';
-import { attendanceOf, BAD_PAYOUT_STATUSES, decisionOf, depositStatusOf, type EventFull, type GuestFull } from './shared.js';
+import { attendanceOf, BAD_PAYOUT_STATUSES, decisionOf, depositStatusOf, releasedEarly, type EventFull, type GuestFull } from './shared.js';
 import { loadHostEvent, settlementBlockers } from './events.js';
 
 /**
@@ -132,11 +132,23 @@ async function ensurePayout(ctx: Ctx, ev: EventFull) {
   const { config } = ctx;
   if (!ev.payout) {
     const captured = ev.guests.filter((g) => g.deposit && depositStatusOf(g.deposit) === 'captured');
+    if (ev.potMode === 'keep') {
+      // The host chose to keep what a no-show paid (it covers the booking). It simply stays in their PayPal
+      // account; nothing is sent, so there is no payout fee and nobody needs a PayPal email.
+      await ctx.db.payout.create({
+        data: {
+          eventId: ev.id, senderBatchId: `flakeproof-${ev.id}`,
+          potCents: captured.reduce((s, g) => s + (g.deposit!.netCents ?? 0), 0), feeReserveCents: 0, distributableCents: 0,
+          batchStatus: 'SKIPPED', skippedReason: captured.length ? 'kept_by_host' : 'no_capture',
+        },
+      });
+      return;
+    }
     if (captured.some((g) => g.deposit!.netCents === null)) {
       throw conflict('net_unknown', 'PayPal did not report a usable net amount for a capture, so the payout is on hold for a human to check.');
     }
     const recipients = ev.guests.filter(
-      (g) => attendanceOf(g) === 'showed' && g.deposit && depositStatusOf(g.deposit) === 'voided' && g.deposit.payerEmail,
+      (g) => attendanceOf(g) === 'showed' && !releasedEarly(g) && g.deposit && depositStatusOf(g.deposit) === 'voided' && g.deposit.payerEmail,
     );
     const plan = planPayout({
       capturedNetCents: captured.map((g) => g.deposit!.netCents!),
