@@ -2,9 +2,10 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type HostDashboardApi, type HostGuest, type HostView } from '../src/api';
-import { HostPage, timingLine } from '../src/pages/HostPage';
+import { HostPage, phaseOf, receiptLines, timingLine } from '../src/pages/HostPage';
 
 const TOKEN = 'h'.repeat(32);
+const STARTED = '2020-01-01T00:00:00.000Z'; // an event that has begun, so check-in shows
 const dep = (status: NonNullable<HostGuest['deposit']>['status'], extra: Partial<NonNullable<HostGuest['deposit']>> = {}) =>
   ({ status, amountCents: 2000, feeCents: null, netCents: null, payerEmail: 'an***@example.test', ...extra });
 const guest = (name: string, over: Partial<HostGuest> = {}): HostGuest => ({
@@ -39,9 +40,8 @@ describe('HostPage: while the event is open', () => {
   it('shows each friend\'s deposit state in plain words and the invite link only for those who have not paid', async () => {
     mount(fakeApi(view({ guests: [guest('Ana'), guest('Ben', { deposit: dep('pending'), stage: 'invited' }), guest('Dee', { deposit: null, stage: 'invited' })] })));
     expect(await screen.findByRole('heading', { name: 'Court booking' })).toBeInTheDocument();
-    expect(screen.getByText('Hold in place: $20.00')).toBeInTheDocument();
-    expect(screen.getByText('Waiting for PayPal approval')).toBeInTheDocument();
-    expect(screen.getByText('No deposit yet')).toBeInTheDocument();
+    expect(screen.getByText('$20.00 held')).toBeInTheDocument();
+    expect(screen.getAllByText('Waiting')).toHaveLength(2); // one waiting on PayPal, one never started
     expect(screen.queryByRole('button', { name: 'Copy link for Ana' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy link for Ben' })).toBeInTheDocument();
     expect(screen.getByText('Open: holds are being placed')).toBeInTheDocument();
@@ -68,8 +68,14 @@ describe('HostPage: while the event is open', () => {
     expect(await screen.findByText('Ended: decide and settle')).toBeInTheDocument();
   });
 
+  it('keeps check-in out of the way until the event starts', async () => {
+    mount(fakeApi(view()));
+    await screen.findByRole('heading', { name: 'Ana' });
+    expect(screen.queryByRole('group', { name: 'Did Ana come?' })).not.toBeInTheDocument();
+  });
+
   it('marks who came with toggle buttons that report their state', async () => {
-    const api = fakeApi(view());
+    const api = fakeApi(view({ startsAt: STARTED }));
     mount(api);
     const ana = await screen.findByRole('group', { name: 'Did Ana come?' });
     await userEvent.click(within(ana).getByRole('button', { name: 'Came' }));
@@ -81,9 +87,9 @@ describe('HostPage: while the event is open', () => {
   it('picks up a new hold on its own while open', async () => {
     const api = fakeApi(view({ guests: [guest('Dee', { deposit: null, stage: 'invited' })] }));
     mount(api);
-    expect(await screen.findByText('No deposit yet')).toBeInTheDocument();
+    expect(await screen.findByText('Waiting')).toBeInTheDocument();
     api.v = view({ guests: [guest('Dee')] });
-    expect(await screen.findByText('Hold in place: $20.00')).toBeInTheDocument();
+    expect(await screen.findByText('$20.00 held')).toBeInTheDocument();
   });
 });
 
@@ -192,7 +198,7 @@ describe('HostPage: approving and settling', () => {
     expect(screen.getByText(/Receives \$18.56: sending/)).toBeInTheDocument();
     expect(await screen.findByText('All done', {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByText(/Receives \$18.56: sent/)).toBeInTheDocument();
-    expect(screen.getByText(/paid \$18.56 in total/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Receipt')).toHaveTextContent('Paid out to people who came$18.56');
     expect(screen.getByText(/Charged \$20.00 \(PayPal fee \$1.19\)/)).toBeInTheDocument();
     // approval happened exactly once by click; the rest were the idempotent follow-ups
     expect(calls).toBeGreaterThanOrEqual(9);
@@ -268,5 +274,165 @@ describe('timingLine', () => {
     expect(timingLine(120, 120)).toContain('within');
     expect(timingLine(-20, 120)).toBe('Wrote this 20 min after the start.');
     expect(timingLine(180, 120)).toBe('Wrote this 3 h before the start: within your 2 h rule.');
+  });
+});
+
+describe('HostPage: what to do next', () => {
+  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const NOW = new Date('2026-11-01T12:00:00Z');
+
+  it('names the next action for each phase', () => {
+    expect(phaseOf(view(), NOW)).toMatchObject({ kind: 'open', text: '3 of 4 have put the deposit down', sub: 'Waiting on Dee.' });
+    expect(phaseOf(view({ guests: [] }), NOW)).toMatchObject({ kind: 'open', text: 'Share the link in your group chat' });
+    expect(phaseOf(ended([guest('Ana'), guest('Ben')]), NOW)).toMatchObject({ kind: 'checkin', text: 'Who came? 2 to mark' });
+    expect(phaseOf(ended([guest('Ana', { attendance: 'showed' }), guest('Cy', { attendance: 'no_show' })]), NOW)).toMatchObject({ kind: 'decide', text: 'Decide on Cy' });
+    const ready = phaseOf(ended([guest('Ana', { attendance: 'showed' }), guest('Cy', { attendance: 'no_show', decision: 'capture' })], { canSettle: true }), NOW);
+    expect(ready).toMatchObject({ kind: 'approve', text: 'Release 1, charge 1', link: { href: '#approve' } });
+    expect(phaseOf(view({ status: 'settled', settlementApproved: true }), NOW).kind).toBe('done');
+  });
+
+  it('says deposits are not open yet when the event is a week away, instead of counting missing holds', () => {
+    const far = view({ holdsOpenAt: '2026-11-05T12:00:00.000Z', guests: [guest('Ana', { deposit: null, stage: 'invited' })] });
+    const p = phaseOf(far, NOW);
+    expect(p.text).toBe('1 person has joined');
+    expect(p.sub).toMatch(/Deposits open/);
+  });
+
+  it('does not count a friend who released their own spot as a missing hold or a missing check-in', () => {
+    const out = guest('Ben', { stage: 'cancelled', deposit: dep('voided'), cancel: { kind: 'released', at: null, minutesBeforeStart: 1440 } });
+    expect(phaseOf(view({ guests: [guest('Ana'), out] }), NOW).text).toBe('1 of 1 have put the deposit down');
+    expect(phaseOf(ended([guest('Ana', { attendance: 'showed' }), out]), NOW).kind).not.toBe('checkin');
+  });
+
+  it('puts the next step on top, with the real button inside it', async () => {
+    mount(fakeApi(view()));
+    const card = (await screen.findByText("What's next")).closest('section')!;
+    expect(card).toHaveTextContent('3 of 4 have put the deposit down');
+    expect(within(card).getByRole('button', { name: 'Event ended' })).toBeInTheDocument();
+  });
+
+  it('copies a ready-written message for the group chat, naming who is missing once deposits are open', async () => {
+    const copy = vi.fn(async (_t: string) => {});
+    render(<HostPage token={TOKEN} api={fakeApi(view({ joinUrl: 'http://localhost:5173/e/' + 'j'.repeat(32) }))} copy={copy} pollMs={999999} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy a reminder for the chat' }));
+    const text = copy.mock.calls[0]![0] as string;
+    expect(text).toContain('Dee: deposits are open for Court booking');
+    expect(text).toContain('/e/' + 'j'.repeat(32));
+    expect(text).toContain('nothing is charged if you show up');
+  });
+
+  it('uses the invitation message while nobody has put a deposit down yet', async () => {
+    const copy = vi.fn(async (_t: string) => {});
+    render(<HostPage token={TOKEN} api={fakeApi(view({ joinUrl: 'http://localhost:5173/e/' + 'j'.repeat(32), guests: [guest('Ana', { deposit: null, stage: 'invited' })] }))} copy={copy} pollMs={999999} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy the message for the chat' }));
+    expect(copy.mock.calls[0]![0]).toContain('Tap your name to confirm your spot');
+  });
+
+  it('shows who has joined and who has not, in plain words', async () => {
+    mount(fakeApi(view({ guests: [guest('Ana'), guest('Ben', { deposit: null, stage: 'invited', joined: false }), guest('Cy', { deposit: null, stage: 'invited', joined: true })] })));
+    await screen.findByRole('heading', { name: 'Ana' });
+    expect(screen.getByText('Deposit in')).toBeInTheDocument();
+    expect(screen.getByText('Not joined')).toBeInTheDocument();
+    expect(screen.getByText('Waiting')).toBeInTheDocument();
+  });
+
+  it('after the event, says plainly that someone never put a deposit down (there is nothing to charge)', async () => {
+    mount(fakeApi(ended([guest('Ana', { attendance: 'showed' }), guest('Dee', { deposit: null, stage: 'invited', joined: true })])));
+    await screen.findByRole('heading', { name: 'Dee' });
+    expect(screen.getByText('No deposit')).toBeInTheDocument();
+    expect(screen.queryByText('Waiting')).not.toBeInTheDocument();
+  });
+
+  it('marks everyone who has a hold as having come in one tap', async () => {
+    const api = fakeApi(ended([guest('Ana'), guest('Ben')], { blockers: ['Mark attendance for: Ana, Ben.'] }));
+    (api as any).allCame = vi.fn(async () => (api.v = { ...api.v, guests: api.v.guests.map((g: HostGuest) => ({ ...g, attendance: 'showed' as const })) }));
+    mount(api);
+    await userEvent.click(await screen.findByRole('button', { name: 'Everyone came' }));
+    expect(api.allCame).toHaveBeenCalledWith(TOKEN);
+    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Did Ana come?' })).getByRole('button', { name: 'Came' })).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('lets the host remove a name that has no hold, and only that', async () => {
+    const api = fakeApi(view({ guests: [guest('Ana'), guest('Typo', { deposit: null, stage: 'invited', joined: true })] }));
+    (api as any).removeGuest = vi.fn(async () => (api.v = { ...api.v, guests: api.v.guests.filter((g: HostGuest) => g.name !== 'Typo') }));
+    mount(api);
+    expect(screen.queryByRole('button', { name: 'Remove Ana' })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Typo' }));
+    expect(api.removeGuest).toHaveBeenCalledWith(TOKEN, 'g_Typo');
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Typo' })).not.toBeInTheDocument());
+  });
+
+  it('says it plainly when the host keeps the charged money', async () => {
+    const v = ended([guest('Ana', { attendance: 'showed' }), guest('Cy', { attendance: 'no_show', decision: 'capture' })], {
+      canSettle: true, potMode: 'keep', payoutPreview: { provisional: false, capturingCount: 1, recipientCount: 0, estimatedPotCents: 1881, estimatedPerPersonCents: null, problem: null, unpayableNames: [], mode: 'keep' },
+    });
+    mount(fakeApi(v));
+    expect(await screen.findByText(/You keep the charged money/)).toBeInTheDocument();
+    expect(screen.getByText(/It stays in your PayPal account/)).toBeInTheDocument();
+  });
+
+  it('shows a released friend as out, with no check-in and no invite link', async () => {
+    const out = guest('Ben', { stage: 'cancelled', deposit: dep('voided'), cancel: { kind: 'released', at: null, minutesBeforeStart: 1440 } });
+    mount(fakeApi(view({ startsAt: STARTED, guests: [guest('Ana'), out] })));
+    expect(await screen.findByText(/Released their spot 24 h before the start/)).toBeInTheDocument();
+    expect(screen.getByText("Can't come")).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Did Ben come?' })).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Did Ana come?' })).toBeInTheDocument();
+  });
+
+  it('shows a late warning as a fact and still asks the host to check in', async () => {
+    const late = guest('Cy', { cancel: { kind: 'late_notice', at: null, minutesBeforeStart: 50 } });
+    mount(fakeApi(view({ startsAt: STARTED, guests: [late] })));
+    expect(await screen.findByText(/Said they can't come 50 min before the start. The hold stays/)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Did Cy come?' })).toBeInTheDocument();
+  });
+
+  it('says whether the host agreed with the AI or overruled it, only after the host chose', async () => {
+    const ai = { recommendation: 'forgive' as const, reason: 'Car trouble.', evidence: 'car broke down', flag: null, minutesBeforeStart: 190 };
+    const cy = (decision: 'capture' | 'forgive' | null) => guest('Cy', { attendance: 'no_show', stage: 'no_show', ai, decision });
+    const { unmount } = mount(fakeApi(ended([cy(null)])));
+    await screen.findByLabelText('AI suggestion for Cy');
+    expect(screen.queryByText(/agreed with the AI|overruled the AI/)).not.toBeInTheDocument();
+    unmount();
+    mount(fakeApi(ended([cy('capture')])));
+    expect(await screen.findByText('You overruled the AI')).toBeInTheDocument();
+    cleanup();
+    mount(fakeApi(ended([cy('forgive')])));
+    expect(await screen.findByText('You agreed with the AI')).toBeInTheDocument();
+  });
+
+  it('builds the receipt from PayPal\'s own figures', () => {
+    const v = view({
+      status: 'settled', settlementApproved: true,
+      guests: [
+        guest('Ana', { deposit: dep('voided'), payout: { amountCents: 602, status: 'SUCCESS', feeCents: 25 } }),
+        guest('Ben', { deposit: dep('voided'), payout: { amountCents: 602, status: 'SUCCESS', feeCents: 25 } }),
+        guest('Cy', { deposit: dep('captured', { feeCents: 119, netCents: 1881 }) }),
+        guest('Dee', { stage: 'cancelled', deposit: dep('voided'), cancel: { kind: 'released', at: null, minutesBeforeStart: 1440 } }),
+      ],
+      payout: { status: 'COMPLETED', skippedReason: null, potCents: 1881, feeReserveCents: 50, distributableCents: 1831, actualFeesCents: 50 },
+    });
+    const lines = receiptLines(v, fmt);
+    expect(lines.map((l) => `${l.label}=${l.value}`)).toEqual([
+      'Holds released=2 people',
+      'Released their own spot=1 person',
+      'Deposit charged (Cy)=$20.00',
+      "PayPal's fee on the charge=−$1.19",
+      'Left to share=$18.81',
+      "PayPal's payout fees=−$0.50",
+      'Paid out to people who came=$12.04',
+      'Left over in your PayPal account=$6.27',
+    ]);
+  });
+
+  it('shows a "kept by you" receipt when the host kept the money', () => {
+    const v = view({
+      status: 'settled', settlementApproved: true, potMode: 'keep',
+      guests: [guest('Ana', { deposit: dep('voided') }), guest('Cy', { deposit: dep('captured', { feeCents: 119, netCents: 1881 }) })],
+      payout: { status: 'SKIPPED', skippedReason: 'kept_by_host', potCents: 1881, feeReserveCents: 0, distributableCents: 0, actualFeesCents: null },
+    });
+    expect(receiptLines(v, fmt).map((l) => `${l.label}=${l.value}`)).toEqual([
+      'Holds released=1 person', 'Deposit charged (Cy)=$20.00', "PayPal's fee on the charge=−$1.19", 'Kept by you=$18.81',
+    ]);
   });
 });

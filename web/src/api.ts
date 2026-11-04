@@ -1,16 +1,27 @@
 // Typed client for the Flakeproof server. The server decides every amount; the browser only
 // ever sends "start" and "confirm", never a price.
 
-export type GuestStage = 'invited' | 'authorized' | 'showed' | 'no_show' | 'voided' | 'captured' | 'paid_out';
+export type GuestStage = 'invited' | 'authorized' | 'showed' | 'no_show' | 'voided' | 'captured' | 'paid_out' | 'cancelled';
+
+/** "I can't make it" as the friend sees it. `can` says what pressing the button would do right now. */
+export interface GuestCancel {
+  releaseUntil: string;
+  state: 'released' | 'late_notice' | null;
+  cancelledAt: string | null;
+  can: 'release' | 'warn' | null;
+}
 
 export interface GuestView {
   guestName: string;
-  event: { title: string; startsAt: string; depositCents: number; currency: string; status: 'open' | 'ended' | 'settled' };
+  event: { title: string; startsAt: string; depositCents: number; currency: string; status: 'open' | 'ended' | 'settled'; potMode?: 'share' | 'keep' };
+  /** When holds open and close. Before `opensAt` the friend is in the group but cannot put the deposit down yet. */
+  holds?: { state: 'not_yet' | 'open' | 'closed'; opensAt: string };
   stage: GuestStage;
   depositStatus: 'pending' | 'authorized' | 'capture_pending' | 'captured' | 'voided' | null;
   outcome: { kind: 'none' | 'held' | 'nothing_charged' | 'charged' | 'received'; amountCents?: number };
   share: { amountCents: number; status: string } | null;
   canApprove: boolean;
+  cancel?: GuestCancel;
 }
 
 export class ApiError extends Error {
@@ -20,7 +31,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
+async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -44,6 +55,8 @@ export interface GuestApi {
   getGuest(token: string): Promise<GuestView>;
   startDeposit(token: string): Promise<{ approveUrl: string }>;
   authorize(token: string): Promise<GuestView>;
+  /** "I can't make it": releases the hold if early enough, otherwise only tells the host. */
+  cancel(token: string): Promise<GuestView>;
 }
 
 const enc = encodeURIComponent;
@@ -51,6 +64,7 @@ export const guestApi: GuestApi = {
   getGuest: (t) => request('GET', `/api/g/${enc(t)}`),
   startDeposit: (t) => request('POST', `/api/g/${enc(t)}/deposit`),
   authorize: (t) => request('POST', `/api/g/${enc(t)}/authorize`),
+  cancel: (t) => request('POST', `/api/g/${enc(t)}/cancel`),
 };
 
 // ---- host side: read a pasted chat, then create the event ----------------------------------
@@ -71,12 +85,19 @@ export interface CreateEventBody {
   title: string;
   startsAt: string; // ISO with offset
   depositCents: number;
-  guests: { name: string }[];
+  /** Optional: names to pre-list so friends can tap theirs. Friends can also type their own from the shared link. */
+  guests?: { name: string }[];
+  /** Hours before the start until a friend may release their own hold. */
+  graceHours?: number;
+  /** Where a no-show's charged deposit goes. */
+  potMode?: 'share' | 'keep';
 }
 
 export interface CreatedEvent {
   hostToken: string;
   hostUrl: string;
+  /** The one link for the group chat. */
+  joinUrl: string;
   event: { id: string; title: string; warnings: string[]; guests: { id: string; name: string; inviteUrl: string }[] };
 }
 
@@ -118,6 +139,8 @@ export type Decision = 'capture' | 'forgive';
 export interface HostGuest {
   id: string;
   name: string;
+  /** Picked their name from the shared link, or put a hold down. */
+  joined?: boolean;
   inviteUrl: string;
   attendance: Attendance;
   /** The host's own choice. Always null until the host picks; the AI never fills it in. */
@@ -127,6 +150,8 @@ export interface HostGuest {
   stage: GuestStage;
   deposit: { status: 'pending' | 'authorized' | 'capture_pending' | 'captured' | 'voided'; amountCents: number; feeCents: number | null; netCents: number | null; payerEmail: string | null } | null;
   payout: { amountCents: number; status: string; feeCents: number | null } | null;
+  /** The friend's own "I can't make it": a plain fact with its timing, never a decision. */
+  cancel?: { kind: 'released' | 'late_notice'; at: string | null; minutesBeforeStart: number | null } | null;
 }
 
 export interface PayoutPreview {
@@ -137,6 +162,7 @@ export interface PayoutPreview {
   estimatedPerPersonCents: number | null;
   problem: 'no_recipients' | 'pot_too_small' | null;
   unpayableNames: string[];
+  mode?: 'share' | 'keep';
 }
 
 export interface HostView {
@@ -148,6 +174,10 @@ export interface HostView {
   status: 'open' | 'ended' | 'settled';
   /** Excuses sent at least this long before the start count as timely: a fact shown to the host, not a rule that decides. */
   graceMinutes: number;
+  potMode?: 'share' | 'keep';
+  /** The one link for the group chat (null only for events made before join links existed). */
+  joinUrl?: string | null;
+  holdsOpenAt?: string;
   settlementApproved: boolean;
   canSettle: boolean;
   blockers: string[];
@@ -166,6 +196,10 @@ export interface HostDashboardApi {
   judge(token: string, chat: string, timeZone: string): Promise<HostView>;
   /** The explicit approval. Safe to call again to resume or refresh payout status. */
   settle(token: string): Promise<HostView>;
+  /** Marks everyone with a hold who is not marked yet as having come. */
+  allCame(token: string): Promise<HostView>;
+  /** Takes a name off the list, before it has a hold. */
+  removeGuest(token: string, guestId: string): Promise<HostView>;
 }
 
 export const hostDashboardApi: HostDashboardApi = {
@@ -175,4 +209,26 @@ export const hostDashboardApi: HostDashboardApi = {
   setDecision: (t, g, decision) => request('PUT', `/api/host/${enc(t)}/guests/${enc(g)}/decision`, { decision }),
   judge: (t, chat, timeZone) => request('POST', `/api/host/${enc(t)}/judge`, { chat, timeZone }),
   settle: (t) => request('POST', `/api/host/${enc(t)}/settle`, { approve: true }),
+  allCame: (t) => request('POST', `/api/host/${enc(t)}/attendance/all-came`, {}),
+  removeGuest: (t, g) => request('DELETE', `/api/host/${enc(t)}/guests/${enc(g)}`),
+};
+
+// ---- the shared link: pick or type your name ----------------------------------------------------------------------
+
+export interface JoinView {
+  event: { title: string; startsAt: string; depositCents: number; currency: string; status: 'open' | 'ended' | 'settled'; potMode: 'share' | 'keep'; graceHours: number };
+  holds: { state: 'not_yet' | 'open' | 'closed'; opensAt: string };
+  names: { id: string; name: string; taken: boolean }[];
+  joinable: boolean;
+  canAddName: boolean;
+  joinedCount: number;
+}
+export interface Joined { inviteToken: string; inviteUrl: string; name: string }
+export interface JoinApi {
+  getJoin(code: string): Promise<JoinView>;
+  join(code: string, who: { guestId: string } | { name: string }): Promise<Joined>;
+}
+export const joinApi: JoinApi = {
+  getJoin: (c) => request('GET', `/api/join/${enc(c)}`),
+  join: (c, who) => request('POST', `/api/join/${enc(c)}`, who),
 };

@@ -6,3 +6,8 @@ export function formatMoney(cents: number, currency: string): string {
 export function formatWhen(iso: string, locale?: string): string {
   return new Intl.DateTimeFormat(locale, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 }
+
+/** "Sat 4:00 PM": short, for deadlines that are always within a day or two. */
+export function formatDeadline(iso: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+}

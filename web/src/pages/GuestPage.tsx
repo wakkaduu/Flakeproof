@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError, guestApi, type GuestApi, type GuestView } from '../api';
-import { formatMoney, formatWhen } from '../lib/format';
+import { Avatar, Banner, btnPrimary, btnQuiet, btnSecondary, Card, EventHeader, Icon, Page, Skeleton } from '../components/ui';
+import { formatDeadline, formatMoney } from '../lib/format';
+import { downloadText, reminderIcs } from '../lib/ics';
+import { useTitle } from '../lib/useTitle';
 
 export type PayPalReturn = 'return' | 'cancel' | null;
 
@@ -11,17 +14,20 @@ interface Props {
   api?: GuestApi;
   /** Where to send the browser for PayPal approval. Injected so tests don't navigate. */
   navigate?: (url: string) => void;
+  /** Saves a calendar file. Injected so tests do not need a browser download. */
+  download?: (filename: string, mime: string, text: string) => void;
 }
 
-type Busy = null | 'starting' | 'confirming';
+type Busy = null | 'starting' | 'confirming' | 'cancelling';
 interface Notice { tone: 'info' | 'warn'; text: string }
 
-export function GuestPage({ token, paypalReturn = null, api = guestApi, navigate = (u) => window.location.assign(u) }: Props) {
+export function GuestPage({ token, paypalReturn = null, api = guestApi, navigate = (u) => window.location.assign(u), download = downloadText }: Props) {
   const [view, setView] = useState<GuestView | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const handledReturn = useRef(false);
+  useTitle(view ? view.event.title : 'Your invite');
 
   const confirm = useCallback(async () => {
     setBusy('confirming');
@@ -75,6 +81,18 @@ export function GuestPage({ token, paypalReturn = null, api = guestApi, navigate
     }
   }
 
+  async function cancel() {
+    setBusy('cancelling');
+    setNotice(null);
+    try {
+      setView(await api.cancel(token));
+    } catch (e) {
+      setNotice({ tone: 'warn', text: (e as ApiError).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (loadError) {
     return (
       <Shell>
@@ -94,7 +112,11 @@ export function GuestPage({ token, paypalReturn = null, api = guestApi, navigate
   if (!view) {
     return (
       <Shell>
-        <Card><p role="status" className="text-ink-soft">Loading your invite…</p></Card>
+        <Card>
+          <p role="status" className="text-ink-soft">Loading your invite…</p>
+          <Skeleton className="mt-3 h-8 w-2/3" />
+          <Skeleton className="mt-3 h-16" />
+        </Card>
       </Shell>
     );
   }
@@ -104,55 +126,61 @@ export function GuestPage({ token, paypalReturn = null, api = guestApi, navigate
 
   return (
     <Shell>
-      <p className="text-sm text-ink-soft">Hi {view.guestName}</p>
-      <h1 className="mt-1 text-3xl font-bold tracking-tight">{event.title}</h1>
+      <p className="mb-3 flex items-center gap-2 text-ink-soft"><Avatar name={view.guestName} size="sm" /><span>Hi {view.guestName}</span></p>
+      <EventHeader title={event.title} startsAt={event.startsAt}>
+        <p className="mt-4 flex items-baseline justify-between gap-3 border-t border-line pt-3">
+          <span className="text-ink-soft">Deposit</span>
+          <span className="text-2xl font-bold tabular-nums">{amount}</span>
+        </p>
+      </EventHeader>
 
-      <Card className="mt-5">
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-soft">When</dt>
-            <dd className="mt-1 font-medium">{formatWhen(event.startsAt)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-ink-soft">Deposit</dt>
-            <dd className="mt-1 text-2xl font-bold tabular-nums">{amount}</dd>
-          </div>
-        </dl>
-      </Card>
-
-      <div aria-live="polite" className="mt-5 space-y-4">
-        {notice && <Banner tone={notice.tone}>{notice.text}</Banner>}
+      <div aria-live="polite" className="mt-4 space-y-4">
+        {notice && <Banner tone={notice.tone === 'warn' ? 'hold' : 'info'} alert={notice.tone === 'warn'}>{notice.text}</Banner>}
         {busy === 'confirming' && <Banner tone="info">Confirming with PayPal…</Banner>}
-        <StatusPanel view={view} amount={amount} busy={busy} onApprove={approve} />
+        <StatusPanel view={view} amount={amount} busy={busy} onApprove={approve}
+          onRemind={() => view.holds && download('flakeproof-reminder.ics', 'text/calendar', reminderIcs({ title: event.title, opensAt: view.holds.opensAt, startsAt: event.startsAt, url: window.location.href.split('?')[0]!, uid: token.slice(0, 12) }))} />
       </div>
 
-      <HowItWorks amount={amount} />
+      <CancelPanel view={view} busy={busy} onConfirm={cancel} />
+
+      <HowItWorks amount={amount} potMode={event.potMode ?? 'share'} />
     </Shell>
   );
 }
 
-function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amount: string; busy: Busy; onApprove: () => void }) {
+function StatusPanel({ view, amount, busy, onApprove, onRemind }: { view: GuestView; amount: string; busy: Busy; onApprove: () => void; onRemind: () => void }) {
   const { event, outcome, share } = view;
   const money = (c: number) => formatMoney(c, event.currency);
 
+  if (view.cancel?.state === 'released') {
+    return (
+      <Card tone="good">
+        <h2 className="text-lg font-semibold">You're out. Nothing was charged.</h2>
+        <p className="mt-1">Your host has been told.</p>
+      </Card>
+    );
+  }
+
+  if (!view.canApprove && view.depositStatus === null && view.holds?.state === 'not_yet' && event.status === 'open') {
+    return (
+      <Card tone="brand">
+        <p className="flex items-center gap-2 text-sm font-semibold text-brand-800"><Icon name="check" className="size-4" />You're on the list</p>
+        <h2 className="mt-1 text-lg font-semibold">Deposits open {formatDeadline(view.holds.opensAt)}</h2>
+        <p className="mt-1 text-ink-soft">PayPal holds last 3 days. Come back to this link then.</p>
+        <button type="button" onClick={onRemind} className={`${btnSecondary} mt-4 w-full`}><Icon name="calendar" className="size-4" />Remind me in my calendar</button>
+      </Card>
+    );
+  }
+
   if (view.canApprove) {
     return (
-      <Card tone="neutral">
+      <Card tone="brand">
         <h2 className="text-lg font-semibold">Hold {amount} to confirm your spot</h2>
-        <p className="mt-1 text-ink-soft">
-          You approve it on PayPal. It is only a hold: <strong>nothing is charged</strong>.
-        </p>
-        <button
-          type="button"
-          onClick={onApprove}
-          disabled={busy !== null}
-          className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-ink px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-good-600 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {busy === 'starting' ? 'Opening PayPal…' : 'Approve with PayPal'}
+        <p className="mt-1 text-ink-soft">It is only a hold: <strong>nothing is charged</strong>.</p>
+        <button type="button" onClick={onApprove} disabled={busy !== null} className={`${btnPrimary} mt-4 w-full`}>
+          {!busy && <Icon name="lock" className="size-4" />}{busy === 'starting' ? 'Opening PayPal…' : 'Approve with PayPal'}
         </button>
-        <p className="mt-3 text-sm text-ink-soft">
-          On PayPal's page the final button says “Complete Purchase”. Here it only places the hold.
-        </p>
+        <p className="mt-2 text-center text-sm text-ink-soft">PayPal's last button says “Complete Purchase”. Here it only places the hold.</p>
       </Card>
     );
   }
@@ -160,8 +188,9 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
   if (outcome.kind === 'held') {
     return (
       <Card tone="hold">
-        <h2 className="text-lg font-semibold">Your {money(outcome.amountCents ?? event.depositCents)} hold is in place</h2>
-        <p className="mt-1">Nothing has been charged. If you show up, the hold is released and you pay nothing.</p>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Icon name="check" draw className="size-5" />You're in</p>
+        <h2 className="mt-1 text-lg font-semibold">Your {money(outcome.amountCents ?? event.depositCents)} hold is in place</h2>
+        <p className="mt-1">Nothing is charged. Show up and it disappears.</p>
       </Card>
     );
   }
@@ -170,7 +199,7 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
     return (
       <Card tone="good">
         <h2 className="text-lg font-semibold">You received {money(outcome.amountCents ?? 0)}</h2>
-        <p className="mt-1">Your hold was released, so you paid nothing, and your share of the no-show deposit is in your PayPal account.</p>
+        <p className="mt-1">You paid nothing, and your share is in your PayPal account.</p>
       </Card>
     );
   }
@@ -179,7 +208,6 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
     return (
       <Card tone="good">
         <h2 className="text-lg font-semibold">You paid nothing</h2>
-        <p className="mt-1">Your hold was released.</p>
         {share && <ShareLine share={share} money={money} />}
       </Card>
     );
@@ -189,7 +217,7 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
     return (
       <Card tone="charged">
         <h2 className="text-lg font-semibold">Your {money(outcome.amountCents ?? event.depositCents)} deposit was charged</h2>
-        <p className="mt-1">You weren't there, so the deposit goes to the people who came. Talk to your host if that's a mistake.</p>
+        <p className="mt-1">You weren't there, so it goes to {event.potMode === 'keep' ? 'your host' : 'the people who came'}. Questions? Ask your host.</p>
       </Card>
     );
   }
@@ -197,8 +225,56 @@ function StatusPanel({ view, amount, busy, onApprove }: { view: GuestView; amoun
   return (
     <Card tone="neutral">
       <h2 className="text-lg font-semibold">Deposits are closed</h2>
-      <p className="mt-1 text-ink-soft">This event has ended, so a deposit can't be placed any more.</p>
+      <p className="mt-1 text-ink-soft">The event has ended.</p>
     </Card>
+  );
+}
+
+/**
+ * "Can't make it". Early enough, this releases the friend's own hold at once (a PayPal void) and tells the host in
+ * time to rebook. Too late, it only warns the host, who still decides. Never promises a refund of a charge.
+ * Kept quiet: a text button, with the explanation only once it is pressed.
+ */
+function CancelPanel({ view, busy, onConfirm }: { view: GuestView; busy: Busy; onConfirm: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const c = view.cancel;
+  if (!c) return null;
+  if (c.state === 'late_notice') {
+    return (
+      <p className="mt-4 flex items-start gap-2 text-sm text-ink-soft">
+        <Icon name="clock" className="mt-0.5 size-4" />
+        <span>Your host knows you can't come. {view.depositStatus === 'authorized' ? 'Your hold stays until they decide.' : 'They decide what happens next.'}</span>
+      </p>
+    );
+  }
+  if (!c.can) return null;
+  const release = c.can === 'release';
+  const holding = view.depositStatus === 'authorized';
+  if (!confirming) {
+    return (
+      <div className="mt-3 text-center">
+        <button type="button" onClick={() => setConfirming(true)} className={btnQuiet}>
+          {release ? "I can't make it" : "Tell my host I can't come"}
+        </button>
+        {release && <p className="text-xs text-ink-soft">Free until {formatDeadline(c.releaseUntil)}</p>}
+      </div>
+    );
+  }
+  return (
+    <div role="group" aria-label="Confirm you cannot come" className="mt-4 rounded-2xl border border-hold-100 bg-hold-50 p-4 text-hold-800">
+      <p className="font-medium">{release ? 'Release your spot?' : 'Tell your host you cannot come?'}</p>
+      <p className="mt-1 text-sm">
+        {release
+          ? `${holding ? 'Your hold is released right away' : 'You come off the list'}, you pay nothing and your host can rebook. Cannot be undone.`
+          : "It's too close to the start to release your hold yourself. Your host decides, and it stays until then."}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <button type="button" disabled={busy !== null} onClick={onConfirm} className={btnPrimary}>
+          {busy === 'cancelling' ? 'One moment…' : release ? 'Yes, release my spot' : 'Yes, tell my host'}
+        </button>
+        <button type="button" onClick={() => setConfirming(false)} className={btnQuiet}>Keep my spot</button>
+      </div>
+    </div>
   );
 }
 
@@ -214,55 +290,32 @@ function ShareLine({ share, money }: { share: { amountCents: number; status: str
   );
 }
 
-function HowItWorks({ amount }: { amount: string }) {
+/** Collapsed by default: the explanation is one tap away, not in the way. */
+function HowItWorks({ amount, potMode }: { amount: string; potMode: 'share' | 'keep' }) {
   return (
-    <section className="mt-8" aria-labelledby="how">
-      <h2 id="how" className="text-sm font-semibold uppercase tracking-wide text-ink-soft">How it works</h2>
-      <ol className="mt-3 space-y-3">
+    <details className="group mt-6 border-t border-line pt-4">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between font-medium">
+        How it works<Icon name="plus" className="size-4 text-ink-soft group-open:rotate-45" />
+      </summary>
+      <ol className="mt-2 space-y-3 text-ink-soft">
         <Step n={1}>You approve a hold of {amount} on PayPal. Nothing is charged.</Step>
         <Step n={2}>Show up and the hold is released. You pay nothing.</Step>
-        <Step n={3}>Don't show up and the deposit is charged and shared with the people who did.</Step>
+        <Step n={3}>{potMode === 'keep' ? "Don't show up and it is charged and goes to your host." : "Don't show up and it is charged and shared with the people who came."}</Step>
       </ol>
-      <p className="mt-6 text-xs text-ink-soft">
-        Test mode: this runs on PayPal's sandbox, so no real money moves.
-      </p>
-    </section>
+      <p className="mt-4 text-xs text-ink-soft">PayPal sandbox, so no real money moves.</p>
+    </details>
   );
 }
 
 function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-good-100 text-sm font-semibold text-good-800" aria-hidden="true">{n}</span>
+      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-800" aria-hidden="true">{n}</span>
       <span>{children}</span>
     </li>
   );
 }
 
-const TONES = {
-  neutral: 'bg-white border-line',
-  hold: 'bg-hold-50 border-hold-100 text-hold-800',
-  good: 'bg-good-50 border-good-100 text-good-800',
-  charged: 'bg-charged-50 border-charged-100 text-charged-800',
-} as const;
-
-function Card({ children, tone = 'neutral', className = '' }: { children: ReactNode; tone?: keyof typeof TONES; className?: string }) {
-  return <div className={`rounded-2xl border p-5 shadow-card ${TONES[tone]} ${className}`}>{children}</div>;
-}
-
-function Banner({ tone, children }: { tone: 'info' | 'warn'; children: ReactNode }) {
-  return (
-    <div role={tone === 'warn' ? 'alert' : 'status'} className={`rounded-xl border px-4 py-3 text-sm ${tone === 'warn' ? 'border-hold-100 bg-hold-50 text-hold-800' : 'border-line bg-white text-ink-soft'}`}>
-      {children}
-    </div>
-  );
-}
-
 function Shell({ children }: { children: ReactNode }) {
-  return (
-    <main className="mx-auto min-h-dvh max-w-md px-4 pb-12 pt-[max(1.5rem,env(safe-area-inset-top))]">
-      <p className="mb-6 text-sm font-bold tracking-tight text-good-700">Flakeproof</p>
-      {children}
-    </main>
-  );
+  return <Page>{children}</Page>;
 }

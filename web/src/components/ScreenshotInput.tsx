@@ -23,7 +23,7 @@ export function ScreenshotInput({ reader, hostName, onHostName, onRead, error }:
   return (
     <div className="mt-4">
       <p className="text-ink-soft">
-        Screenshot the chat on your phone, scrolling so each one overlaps the last by a message or two. Start where the plan is made. Up to {MAX_SHOTS}.
+        Screenshots of the chat, each overlapping the last by a message. Up to {MAX_SHOTS}.
       </p>
 
       <input
@@ -70,7 +70,6 @@ export function ScreenshotInput({ reader, hostName, onHostName, onRead, error }:
 
       <div className="mt-4">
         <label htmlFor={nameId} className="block text-sm font-medium">Your name in the chat</label>
-        <p className="text-sm text-ink-soft">Your own messages are on the right and show no name. Type the name your friends know you by.</p>
         <input id={nameId} value={hostName} onChange={(e) => onHostName(e.target.value)} maxLength={40} autoComplete="given-name" className={`${input} mt-1`} />
       </div>
 
@@ -81,7 +80,7 @@ export function ScreenshotInput({ reader, hostName, onHostName, onRead, error }:
       </button>
       <p role="status" className="sr-only">{busy ? `Reading screenshots, ${reader.doneCount} of ${shots.length} done` : ''}</p>
       <p className="mt-2 text-xs text-ink-soft">
-        Screenshots are shrunk on your device, sent to Google's Gemini API to be read, and not kept by Flakeproof. Crop out phone numbers, and use a demo chat, not a private one.
+        Sent to Gemini to be read, not kept. Crop out phone numbers; use a demo chat.
       </p>
     </div>
   );

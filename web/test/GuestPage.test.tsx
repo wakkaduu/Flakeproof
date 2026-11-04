@@ -18,6 +18,12 @@ const base: GuestView = {
 };
 const held: GuestView = { ...base, stage: 'authorized', depositStatus: 'authorized', outcome: { kind: 'held', amountCents: 2000 }, canApprove: false };
 
+const cancelInfo = { releaseUntil: '2026-11-02T16:00:00.000Z', cancelledAt: null };
+const released: GuestView = {
+  ...base, stage: 'cancelled', depositStatus: 'voided', outcome: { kind: 'nothing_charged' }, canApprove: false,
+  cancel: { ...cancelInfo, state: 'released', can: null, cancelledAt: '2026-11-01T10:00:00.000Z' },
+};
+
 function fakeApi(over: Partial<GuestApi> = {}, view: GuestView = base): GuestApi & { calls: string[] } {
   const calls: string[] = [];
   return {
@@ -25,6 +31,7 @@ function fakeApi(over: Partial<GuestApi> = {}, view: GuestView = base): GuestApi
     getGuest: vi.fn(async () => { calls.push('get'); return view; }),
     startDeposit: vi.fn(async () => { calls.push('start'); return { approveUrl: 'https://www.sandbox.paypal.com/checkoutnow?token=O1' }; }),
     authorize: vi.fn(async () => { calls.push('authorize'); return held; }),
+    cancel: vi.fn(async () => { calls.push('cancel'); return released; }),
     ...over,
   };
 }
@@ -127,6 +134,90 @@ describe('GuestPage', () => {
     unmount();
     render(<GuestPage token={TOKEN} api={fakeApi({ getGuest: vi.fn(async () => { throw new ApiError(0, 'network', 'Could not reach the server.'); }) })} />);
     expect(await screen.findByText('Could not reach the server.')).toBeInTheDocument();
+  });
+});
+
+describe("GuestPage: can't make it", () => {
+  const withCancel = (v: GuestView, can: 'release' | 'warn'): GuestView => ({ ...v, cancel: { ...cancelInfo, state: null, can } });
+
+  it('releases the hold only after a confirmation, then shows that nothing was charged', async () => {
+    const api = fakeApi({}, withCancel(held, 'release'));
+    render(<GuestPage token={TOKEN} api={api} />);
+    await userEvent.click(await screen.findByRole('button', { name: "I can't make it" }));
+    expect(screen.getByText(/Your hold is released right away/)).toBeInTheDocument(); // the consequence is stated before the choice
+    expect(api.cancel).not.toHaveBeenCalled(); // a confirmation first
+    await userEvent.click(screen.getByRole('button', { name: 'Keep my spot' }));
+    expect(screen.queryByRole('group', { name: 'Confirm you cannot come' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: "I can't make it" }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, release my spot' }));
+    expect(await screen.findByRole('heading', { name: /You're out/ })).toBeInTheDocument();
+    expect(api.cancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Approve with PayPal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: "I can't make it" })).not.toBeInTheDocument();
+  });
+
+  it('is honest that after the cutoff it only warns the host and the hold stays', async () => {
+    const lateView: GuestView = { ...held, cancel: { ...cancelInfo, state: 'late_notice', can: null } };
+    const api = fakeApi({ cancel: vi.fn(async () => lateView) }, withCancel(held, 'warn'));
+    render(<GuestPage token={TOKEN} api={api} />);
+    await userEvent.click(await screen.findByRole('button', { name: "Tell my host I can't come" }));
+    expect(screen.getByText(/too close to the start to release your hold/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, tell my host' }));
+    expect(await screen.findByText(/Your host knows you can't come/)).toBeInTheDocument();
+    expect(screen.getByText(/Your hold stays until they decide/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /hold is in place/ })).toBeInTheDocument(); // still holding
+  });
+
+  it('shows the error from the server and keeps the choice available', async () => {
+    const api = fakeApi({ cancel: vi.fn(async () => { throw new ApiError(409, 'event_closed', 'This event has ended.'); }) }, withCancel(held, 'release'));
+    render(<GuestPage token={TOKEN} api={api} />);
+    await userEvent.click(await screen.findByRole('button', { name: "I can't make it" }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, release my spot' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('This event has ended.');
+  });
+
+  it('offers nothing once the event is over', async () => {
+    render(<GuestPage token={TOKEN} api={fakeApi({}, { ...held, cancel: { ...cancelInfo, state: null, can: null } })} />);
+    await screen.findByRole('heading', { name: /hold is in place/ });
+    expect(screen.queryByRole('button', { name: /can't make it|Tell my host/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('GuestPage: before deposits open', () => {
+  const early: GuestView = { ...base, canApprove: false, holds: { state: 'not_yet', opensAt: '2026-11-04T18:00:00.000Z' } };
+
+  it('says the friend is on the list, when deposits open, and offers no PayPal button yet', async () => {
+    render(<GuestPage token={TOKEN} api={fakeApi({}, early)} />);
+    expect(await screen.findByText("You're on the list")).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Deposits open/ })).toBeInTheDocument();
+    expect(screen.getByText(/holds last 3 days/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve with PayPal' })).not.toBeInTheDocument();
+  });
+
+  it('downloads a calendar reminder for the moment deposits open', async () => {
+    const download = vi.fn();
+    render(<GuestPage token={TOKEN} api={fakeApi({}, early)} download={download} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remind me in my calendar' }));
+    expect(download).toHaveBeenCalledTimes(1);
+    const [name, mime, text] = download.mock.calls[0]!;
+    expect(name).toMatch(/\.ics$/);
+    expect(mime).toBe('text/calendar');
+    expect(text).toContain('DTSTART:20261104T180000Z');
+    expect(text).toContain('Court booking');
+  });
+
+  it('still shows the normal button once deposits are open', async () => {
+    render(<GuestPage token={TOKEN} api={fakeApi({}, { ...base, holds: { state: 'open', opensAt: '2026-11-01T18:00:00.000Z' } })} />);
+    expect(await screen.findByRole('button', { name: 'Approve with PayPal' })).toBeInTheDocument();
+  });
+
+  it('says where a charged deposit goes, as the host chose', async () => {
+    const charged: GuestView = { ...base, stage: 'captured', depositStatus: 'captured', outcome: { kind: 'charged', amountCents: 2000 }, canApprove: false };
+    const { unmount } = render(<GuestPage token={TOKEN} api={fakeApi({}, { ...charged, event: { ...base.event, potMode: 'keep' } })} />);
+    expect(await screen.findByText(/so it goes to your host\./, { selector: 'p' })).toBeInTheDocument();
+    unmount();
+    render(<GuestPage token={TOKEN} api={fakeApi({}, { ...charged, event: { ...base.event, potMode: 'share' } })} />);
+    expect(await screen.findByText(/so it goes to the people who came\./)).toBeInTheDocument();
   });
 });
 

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
@@ -23,8 +23,9 @@ const PROPOSAL: RsvpProposal = {
   questions: ['Which Dee is coming?'],
   notes: ['Left out “Dee’s sister”: that name does not appear in the chat.'],
 };
+const JOIN = 'http://localhost:5173/e/' + 'j'.repeat(32);
 const CREATED: CreatedEvent = {
-  hostToken: 'h'.repeat(32), hostUrl: 'http://localhost:5173/host/' + 'h'.repeat(32),
+  hostToken: 'h'.repeat(32), hostUrl: 'http://localhost:5173/host/' + 'h'.repeat(32), joinUrl: JOIN,
   event: { id: 'e1', title: 'Court booking', warnings: [], guests: [
     { id: 'g1', name: 'Ana', inviteUrl: 'http://localhost:5173/g/' + 'a'.repeat(32) },
     { id: 'g2', name: 'Tom', inviteUrl: 'http://localhost:5173/g/' + 't'.repeat(32) },
@@ -40,12 +41,15 @@ function fakeApi(over: Partial<HostApi> = {}): HostApi {
   };
 }
 const emptyNameInput = () => screen.getAllByLabelText('Name').find((i) => (i as HTMLInputElement).value === '')!;
+/** The form is the front door; reading a chat is an optional shortcut. */
+const openChat = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Fill it in from the group chat' }));
 async function readChat(api: HostApi, user = userEvent.setup()) {
   render(<NewEventPage api={api} copy={vi.fn(async () => {})} />);
+  await openChat(user);
   await user.click(screen.getByRole('button', { name: 'Paste text' }));
   await user.type(screen.getByLabelText('Group chat'), 'Sam: $15 each\nAna: in');
   await user.click(screen.getByRole('button', { name: 'Read the chat' }));
-  await screen.findByRole('heading', { name: 'Check the details' });
+  await screen.findByRole('heading', { name: 'Event details' });
   return user;
 }
 
@@ -90,7 +94,7 @@ describe('NewEventPage: reading the chat', () => {
     const api = fakeApi({ parseRsvp: vi.fn(async () => ({ ...PROPOSAL, depositCents: null })) });
     const user = await readChat(api);
     expect(screen.getByLabelText('Deposit per person (USD)')).toHaveValue('');
-    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Enter the deposit as a dollar amount');
     expect(api.createEvent).not.toHaveBeenCalled();
   });
@@ -99,13 +103,14 @@ describe('NewEventPage: reading the chat', () => {
     const api = fakeApi({ parseRsvp: vi.fn(async () => { throw new ApiError(503, 'ai_unavailable', 'The AI helper is busy or unreachable right now. Try again in a moment, or add guests by hand.'); }) });
     const user = userEvent.setup();
     render(<NewEventPage api={api} />);
+    await openChat(user);
     await user.click(screen.getByRole('button', { name: 'Paste text' }));
     await user.type(screen.getByLabelText('Group chat'), 'hello');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('by hand');
-    await user.click(screen.getByRole('button', { name: /Skip, I'll add people myself/ }));
-    expect(await screen.findByRole('heading', { name: 'Check the details' })).toBeInTheDocument();
-    expect(screen.getByText(/No one yet/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Back to the form, I'll type it/ }));
+    expect(await screen.findByRole('heading', { name: 'Event details' })).toBeInTheDocument();
+    expect(screen.getByText(/No names yet/)).toBeInTheDocument();
   });
 
   it('disables reading while empty and while in flight', async () => {
@@ -113,13 +118,14 @@ describe('NewEventPage: reading the chat', () => {
     const api = fakeApi({ parseRsvp: vi.fn(() => new Promise<RsvpProposal>((r) => { resolve = r; })) });
     const user = userEvent.setup();
     render(<NewEventPage api={api} />);
+    await openChat(user);
     await user.click(screen.getByRole('button', { name: 'Paste text' }));
     expect(screen.getByRole('button', { name: 'Read the chat' })).toBeDisabled();
     await user.type(screen.getByLabelText('Group chat'), 'x');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
     expect(screen.getByRole('button', { name: /Reading the chat/ })).toBeDisabled();
     resolve(PROPOSAL);
-    await screen.findByRole('heading', { name: 'Check the details' });
+    await screen.findByRole('heading', { name: 'Event details' });
   });
 });
 
@@ -128,7 +134,7 @@ describe('NewEventPage: creating the event', () => {
     const api = fakeApi();
     const user = await readChat(api);
     await user.click(screen.getByRole('checkbox', { name: 'Include Ben' })); // host decides Ben is in
-    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
     await screen.findByRole('heading', { name: /is ready/ });
     expect(api.createEvent).toHaveBeenCalledTimes(1);
     expect(api.createEvent).toHaveBeenCalledWith({
@@ -136,7 +142,17 @@ describe('NewEventPage: creating the event', () => {
       startsAt: new Date(PROPOSAL.startsAtLocal!).toISOString(),
       depositCents: 1500,
       guests: [{ name: 'Ana' }, { name: 'Ben' }, { name: 'Tom' }],
+      graceHours: 24,
+      potMode: 'share',
     });
+  });
+
+  it('gives the host a button straight to the event page, using this site\'s address', async () => {
+    const api = fakeApi();
+    const user = await readChat(api);
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+    await screen.findByRole('heading', { name: /is ready/ });
+    expect(screen.getByRole('link', { name: 'Go to your event page' })).toHaveAttribute('href', '/host/' + 'h'.repeat(32));
   });
 
   it('lets the host fix a name and add someone the chat missed', async () => {
@@ -144,20 +160,15 @@ describe('NewEventPage: creating the event', () => {
     const user = await readChat(api);
     await user.click(screen.getByRole('button', { name: 'Add someone' }));
     await user.type(emptyNameInput(), 'Dee R');
-    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
     await screen.findByRole('heading', { name: /is ready/ });
     expect((api.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![0].guests).toContainEqual({ name: 'Dee R' });
   });
 
-  it('validates before sending: no one ticked, duplicates, bad amount, zero, past time', async () => {
+  it('validates before sending: duplicates, bad amount, zero', async () => {
     const api = fakeApi();
     const user = await readChat(api);
-    const create = () => user.click(screen.getByRole('button', { name: 'Create event and get links' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Include Ana' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Include Tom' }));
-    await create();
-    expect(screen.getByRole('alert')).toHaveTextContent('Tick at least one person');
-    await user.click(screen.getByRole('checkbox', { name: 'Include Ana' }));
+    const create = () => user.click(screen.getByRole('button', { name: 'Create event' }));
     await user.click(screen.getByRole('button', { name: 'Add someone' }));
     await user.type(emptyNameInput(), 'ana');
     await create();
@@ -174,7 +185,7 @@ describe('NewEventPage: creating the event', () => {
     let finish!: (c: CreatedEvent) => void;
     const api = fakeApi({ createEvent: vi.fn(() => new Promise<CreatedEvent>((r) => { finish = r; })) });
     const user = await readChat(api);
-    const btn = screen.getByRole('button', { name: 'Create event and get links' });
+    const btn = screen.getByRole('button', { name: 'Create event' });
     await user.dblClick(btn);
     expect(api.createEvent).toHaveBeenCalledTimes(1);
     finish(CREATED);
@@ -184,7 +195,7 @@ describe('NewEventPage: creating the event', () => {
   it('shows a server error and keeps the form', async () => {
     const api = fakeApi({ createEvent: vi.fn(async () => { throw new ApiError(400, 'duplicate_guest', 'Guest names must be different so people can tell each other apart.'); }) });
     const user = await readChat(api);
-    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Guest names must be different');
     expect(screen.getByLabelText('Event name')).toHaveValue('Court booking');
   });
@@ -201,28 +212,61 @@ describe('NewEventPage: creating the event', () => {
   });
 });
 
-describe('NewEventPage: the links', () => {
-  it('shows one copyable message per guest and a private host link', async () => {
-    const copy = vi.fn(async () => {});
+describe('NewEventPage: the link', () => {
+  async function created(copy = vi.fn(async () => {})) {
     const user = userEvent.setup();
     render(<NewEventPage api={fakeApi()} copy={copy} />);
+    await openChat(user);
     await user.click(screen.getByRole('button', { name: 'Paste text' }));
     await user.type(screen.getByLabelText('Group chat'), 'x');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
-    await screen.findByRole('heading', { name: 'Check the details' });
-    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await screen.findByRole('heading', { name: 'Event details' });
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
     await screen.findByRole('heading', { name: /is ready/ });
+    return { user, copy };
+  }
 
-    await user.click(screen.getByRole('button', { name: 'Copy message for Ana' }));
-    expect(copy).toHaveBeenLastCalledWith(expect.stringContaining('/g/' + 'a'.repeat(32)));
-    expect(copy).toHaveBeenLastCalledWith(expect.stringContaining('nothing is charged if you show up'));
-    expect(copy).toHaveBeenLastCalledWith(expect.stringContaining('$15.00'));
-    expect(within(screen.getByRole('button', { name: 'Copied' }).parentElement!).getByText('Ana')).toBeInTheDocument();
+  it('gives ONE link for the group chat, with the message already written', async () => {
+    const { user, copy } = await created();
+    const msg = screen.getByTestId('chat-message');
+    expect(msg).toHaveTextContent('Court booking');
+    expect(msg).toHaveTextContent('$15.00');
+    expect(msg).toHaveTextContent('nothing is charged if you show up');
+    expect(msg).toHaveTextContent(JOIN);
+    await user.click(screen.getByRole('button', { name: 'Copy the message' }));
+    expect(copy).toHaveBeenLastCalledWith(expect.stringContaining(JOIN));
+    expect(screen.getByRole('button', { name: /Copied: now paste it in the chat/ })).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole('button', { name: 'Copy all links' }));
-    expect(copy).toHaveBeenLastCalledWith(`Ana: http://localhost:5173/g/${'a'.repeat(32)}\nTom: http://localhost:5173/g/${'t'.repeat(32)}`);
+  it('still lets the host send one listed person their own link, and keeps the host link private', async () => {
+    const { user, copy } = await created();
+    await user.click(screen.getByRole('button', { name: 'Copy personal link for Ana' }));
+    expect(copy).toHaveBeenLastCalledWith('http://localhost:5173/g/' + 'a'.repeat(32));
     expect(screen.getByText(/Keep it private/)).toBeInTheDocument();
     expect(screen.getByText(CREATED.hostUrl)).toBeInTheDocument();
+  });
+
+  it('sends the host\'s free-cancellation and pot choices, and no names when none were listed', async () => {
+    const api = fakeApi();
+    const user = userEvent.setup();
+    render(<NewEventPage api={api} copy={vi.fn(async () => {})} />);
+    await user.type(screen.getByLabelText('Event name'), 'Cabin weekend');
+    await user.type(screen.getByLabelText('Starts'), future(48));
+    await user.type(screen.getByLabelText(/Deposit per person/), '25');
+    await user.click(screen.getByRole('button', { name: '2 days before' }));
+    await user.click(screen.getByRole('button', { name: 'stays with you, to cover the booking' }));
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
+    await screen.findByRole('heading', { name: /is ready/ });
+    const body = (api.createEvent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(body).toMatchObject({ title: 'Cabin weekend', depositCents: 2500, graceHours: 48, potMode: 'keep' });
+    expect(body.guests).toBeUndefined();
+  });
+
+  it('is a form first: the chat reader is a shortcut, not the front door', () => {
+    render(<NewEventPage api={fakeApi()} />);
+    expect(screen.getByLabelText('Event name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fill it in from the group chat' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Group chat')).not.toBeInTheDocument();
   });
 });
 
@@ -231,11 +275,12 @@ describe('remembering the host link on this device', () => {
     localStorage.clear();
     const user = userEvent.setup();
     render(<NewEventPage api={fakeApi()} copy={vi.fn(async () => {})} />);
+    await openChat(user);
     await user.click(screen.getByRole('button', { name: 'Paste text' }));
     await user.type(screen.getByLabelText('Group chat'), 'x');
     await user.click(screen.getByRole('button', { name: 'Read the chat' }));
-    await screen.findByRole('heading', { name: 'Check the details' });
-    await user.click(screen.getByRole('button', { name: 'Create event and get links' }));
+    await screen.findByRole('heading', { name: 'Event details' });
+    await user.click(screen.getByRole('button', { name: 'Create event' }));
     await screen.findByRole('heading', { name: /is ready/ });
     expect(JSON.parse(localStorage.getItem('flakeproof.recentEvents')!)[0]).toMatchObject({ title: 'Court booking', hostPath: '/host/' + 'h'.repeat(32) });
     expect(localStorage.getItem('flakeproof.recentEvents')).not.toContain('localhost'); // only the path, not an origin
@@ -251,7 +296,7 @@ describe('remembering the host link on this device', () => {
     localStorage.setItem('flakeproof.recentEvents', '{not json');
     cleanup();
     render(<App path="/" search="" />);
-    expect(screen.getByRole('link', { name: 'Host an event' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Create an event' })).toBeInTheDocument();
   });
 });
 
@@ -264,6 +309,6 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { name: "This host link isn't valid" })).toBeInTheDocument();
     vi.unstubAllGlobals();
     render(<App path="/" search="" />);
-    await waitFor(() => expect(screen.getByRole('link', { name: 'Host an event' })).toHaveAttribute('href', '/new'));
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Create an event' })).toHaveAttribute('href', '/new'));
   });
 });
